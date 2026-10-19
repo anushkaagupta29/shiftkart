@@ -5,6 +5,7 @@ import type { AppDeps } from '../app';
 import { parse } from '../lib/validate';
 import { notFound } from '../lib/errors';
 import { runJobsOnce } from '../jobs';
+import { sendersFromEnv } from '../adapters/messaging';
 
 const Search = z.object({ phone: z.string().max(20).optional() }).strict();
 
@@ -22,7 +23,7 @@ export async function devRoutes(app: FastifyInstance, { db, config, sms, payouts
   });
 
   /** Run the background jobs now (payouts, auto-approval, settlement) instead of waiting 15 s. */
-  app.post('/dev/jobs/run', { config: { auth: { public: true } } }, async () => runJobsOnce({ db, sms, payouts, dataKey: config.dataKey }));
+  app.post('/dev/jobs/run', { config: { auth: { public: true } } }, async () => runJobsOnce({ db, sms, payouts, dataKey: config.dataKey, senders: sendersFromEnv(db, config.hashKey) }));
 
   /**
    * Time travel for trying check-in by hand: moves a live test shift (and its bookings) so it starts

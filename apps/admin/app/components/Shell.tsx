@@ -13,6 +13,7 @@ export const hasRole = (s: Staff, roles: string[]) => s.roles.some((r) => roles.
 // Mirrors ADMIN_ACCESS in apps/api/src/routes/admin.ts. Only hides links: the API enforces access.
 const NAV: { href: string; label: string; roles?: string[]; section?: string }[] = [
   { href: '/', label: 'Dashboard' },
+  { href: '/analytics', label: 'Analytics' },
   { href: '/businesses', label: 'Business verification', roles: ['ops_verifier', 'ops_support', 'compliance'], section: 'Queues' },
   { href: '/shift-review', label: 'Shift review', roles: ['ops_verifier', 'compliance'] },
   { href: '/flags', label: 'Fraud flags', roles: ['ops_verifier', 'ops_safety', 'ops_disputes', 'compliance'] },

@@ -10,6 +10,7 @@ import { QR_PERIOD_SEC, shiftKey, verifyGateCode } from './domain/qr';
 import { computeTimesheet } from './domain/timesheet';
 import { cosineScore, fromPgVector, type LivenessProvider } from './adapters/mock-face';
 import type { IntegrityVerifier } from './adapters/payouts';
+import { notifyBusiness } from './notify/notify';
 
 export type ClockInput = {
   code: string;
@@ -160,7 +161,7 @@ export async function clockEvent(d: Deps, workerId: string, bookingId: string, t
     }
     await tx.query('UPDATE bookings SET status = $2 WHERE id = $1', [bookingId, type === 'check_in' ? 'checked_in' : 'completed']);
     let timesheet = null;
-    if (type === 'check_out') timesheet = await createTimesheet(tx, bookingId);
+    if (type === 'check_out') timesheet = await createTimesheet(tx, bookingId, d.dataKey);
     await writeAudit(tx, { actorType: 'user', actorId: workerId, action: `attendance.${type}`, targetType: 'booking', targetId: bookingId, after: { flags, mode: offline ? 'offline_qr' : 'online' }, ip });
     return { eventId: ev.id as string, status: ev.status as string, at: ev.effective_at as Date, flags, timesheet };
   });
@@ -307,7 +308,7 @@ export async function respondToManual(d: Deps, workerId: string, eventId: string
 }
 
 /** Builds the timesheet from attendance. Called once, at check-out. Numbers are frozen after this. */
-export async function createTimesheet(tx: Tx, bookingId: string) {
+export async function createTimesheet(tx: Tx, bookingId: string, dataKey?: string) {
   const b = (await tx.query(
     `SELECT b.*, s.starts_at AS s_start, s.ends_at AS s_end, s.break_minutes, s.pay_type, s.pay_paise, s.meal_allowance_paise,
             s.travel_allowance_paise, s.cost, s.business_id
@@ -346,5 +347,9 @@ export async function createTimesheet(tx: Tx, bookingId: string) {
      calc.basePayPaise, calc.overtimePayPaise, calc.allowancesPaise, calc.grossPaise, b.cost.feeBp, b.cost.gstBp, [...flags],
      manual ? 'awaiting_confirmation' : 'pending_approval', pol['timesheet.approval_window_hours']],
   );
+  if (!manual && dataKey) {
+    const w = (await tx.query('SELECT p.first_name, s.title FROM worker_profiles p, shifts s WHERE p.user_id = $1 AND s.id = $2', [b.worker_id, b.shift_id])).rows[0];
+    await notifyBusiness(tx, { dataKey }, b.business_id, 'timesheet_pending', { name: w.first_name, title: w.title, hours: pol['timesheet.approval_window_hours'] }, `ts:${r.rows[0].id}`);
+  }
   return r.rows[0];
 }

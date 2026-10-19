@@ -159,6 +159,8 @@ describe('safety (SAF-01, SAF-02, WRK-06, BIZ-05)', () => {
     const sos = await ctx.app.inject({ method: 'POST', url: '/worker/sos', headers: s.worker.auth, payload: { bookingId: s.bookingId, ...WHITEFIELD, accuracyM: 20, shareWithContact: true } });
     expect(sos.json()).toMatchObject({ sharedWithContact: true });
     expect(await flagsOf(`sos:${sos.json().id}`)).toContain('sos_open');
+    await ctx.db.query(`UPDATE notifications SET critical = true WHERE template = 'sos_trusted_contact'`); // already critical; keeps the test independent of the clock
+    await runJobs(ctx);
     const sms = (await ctx.app.inject({ method: 'POST', url: '/dev/outbox', payload: { phone: '9811100011' } })).json()[0].body as string;
     const link = sms.match(/\/safety\/share\/[\w-]+/)![0];
     const page = await ctx.app.inject({ method: 'GET', url: link });

@@ -26,12 +26,17 @@ const SHIFT_COLUMNS = `
   COALESCE(b.trade_name, b.legal_name) AS business_name, si.name AS site_name, si.address,
   ST_Y(si.location::geometry) AS lat, ST_X(si.location::geometry) AS lng`;
 
-/** Everything a worker needs up front: full pay, place and timing. No hidden details. */
-function workerShiftView(s: Record<string, any>, worker?: Record<string, any>) {
+/**
+ * Everything a worker needs up front: full pay, place and timing. No hidden details.
+ * The list (compact) leaves out long text the detail screen shows, to keep the feed small on 2G.
+ */
+function workerShiftView(s: Record<string, any>, worker?: Record<string, any>, compact = false) {
   const elig = worker ? eligibility(worker as never, s.requirements) : { eligible: false, missing: ['profile'] };
+  const full = compact ? {} : { description: s.description, address: s.address, dressCode: s.dress_code, bringItems: s.bring_items, requirements: s.requirements, lat: s.lat, lng: s.lng };
   return {
-    id: s.id, title: s.title, description: s.description, role: { code: s.role_code, name: s.role_name },
-    businessName: s.business_name, siteName: s.site_name, address: s.address, lat: s.lat, lng: s.lng,
+    ...full,
+    id: s.id, title: s.title, role: { code: s.role_code, name: s.role_name },
+    businessName: s.business_name, siteName: s.site_name,
     distanceKm: s.dist_m != null ? Math.round(s.dist_m / 100) / 10 : undefined,
     startsAt: s.starts_at, endsAt: s.ends_at, breakMinutes: s.break_minutes,
     pay: {
@@ -40,7 +45,6 @@ function workerShiftView(s: Record<string, any>, worker?: Record<string, any>) {
       takeHomePaise: s.cost.perWorkerPayPaise + s.cost.perWorkerAllowancesPaise,
     },
     slotsLeft: Math.max(0, s.headcount - s.filled_count), headcount: s.headcount,
-    requirements: s.requirements, dressCode: s.dress_code, bringItems: s.bring_items,
     eligible: elig.eligible, missing: elig.missing, isNight: s.is_night, transportProvided: s.night_transport_attested, businessId: s.business_id,
     businessRating: s.business_rating ?? null,
     myWaitlist: s.wl_status ? { id: s.wl_id, status: s.wl_status, expiresAt: s.wl_expires } : null,
@@ -76,7 +80,7 @@ export async function workerShiftRoutes(app: FastifyInstance, { db, sms, config 
     );
     const ratings = new Map<string, unknown>();
     for (const s of r.rows) if (!ratings.has(s.business_id)) ratings.set(s.business_id, await businessRating(db, s.business_id));
-    const items = r.rows.map((s) => workerShiftView({ ...s, business_rating: ratings.get(s.business_id) }, w));
+    const items = r.rows.map((s) => workerShiftView({ ...s, business_rating: ratings.get(s.business_id) }, w, true));
     // Once the profile is done, only shifts the worker actually qualifies for are shown.
     return { items: w?.profile_completed_at ? items.filter((s) => s.eligible) : items, radiusKm };
   });
@@ -148,6 +152,19 @@ export async function workerShiftRoutes(app: FastifyInstance, { db, sms, config 
     const { id } = parse(IdParam, req.params);
     const body = parse(z.object({ emergency: z.object({ reason: z.string().trim().min(5).max(500) }).strict().optional() }).strict(), req.body ?? {});
     return cancelByWorker(db, a.userId, id, { emergency: body.emergency }, { sms, dataKey: config.dataKey });
+  });
+
+  /** "I'm coming" / "I can't come" from the reminder. Not coming leads to the normal cancel flow. */
+  app.post('/worker/bookings/:id/intent', { config: workerAuth }, async (req) => {
+    const a = userActor(req);
+    const { id } = parse(IdParam, req.params);
+    const { coming } = parse(z.object({ coming: z.boolean() }).strict(), req.body);
+    const r = await db.query(
+      `UPDATE bookings SET confirmed_attendance = $3, attendance_answered_at = now() WHERE id = $1 AND worker_id = $2 AND status = 'confirmed' RETURNING id`,
+      [id, a.userId, coming],
+    );
+    if (!r.rowCount) throw notFound();
+    return { coming, next: coming ? null : 'cancel' };
   });
 
   app.get('/worker/offers', { config: workerAuth }, async (req) => {

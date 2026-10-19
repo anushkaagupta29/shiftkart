@@ -167,6 +167,7 @@ export function MeScreen({ t, lang, go, setError }: P) {
         </Card>
       ))}
       <Big kind="secondary" icon="🛡️" label={t.safety} onPress={() => go({ name: 'safety' })} />
+      <MessageSettings {...{ t, setError }} />
     </Screen>
   );
 }
@@ -226,5 +227,21 @@ export function HireOffers({ t, setError }: P) {
         </Card>
       ))}
     </>
+  );
+}
+
+function MessageSettings({ t, setError }: Pick<P, 't' | 'setError'>) {
+  const [p, setP] = useState<{ whatsappOptIn: boolean; remindersOptOut: boolean } | null>(null);
+  const { run } = useBusy(setError);
+  useEffect(() => { api('/me/notifications').then(setP).catch(() => {}); }, []);
+  if (!p) return null;
+  const save = (next: typeof p) => run(async () => { setP(await api('/me/notifications', { method: 'PUT', body: next })); });
+  return (
+    <Card>
+      <T bold>✉️ {t.settings}</T>
+      <Chip testID="wa-optin" label={t.whatsappOptIn} on={p.whatsappOptIn} onPress={() => save({ ...p, whatsappOptIn: !p.whatsappOptIn })} />
+      <Chip label={t.remindersOptOut} on={p.remindersOptOut} onPress={() => save({ ...p, remindersOptOut: !p.remindersOptOut })} />
+      <T muted size={14}>{t.settingsNote}</T>
+    </Card>
   );
 }

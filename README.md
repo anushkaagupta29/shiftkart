@@ -1,7 +1,7 @@
 # ShiftKart
 
 Short-shift staffing for India: businesses post pre-funded shifts, verified workers pick them,
-check in on site, and get paid within a day. **Status: Phase 4 (trust layer) done.** Everything runs
+check in on site, and get paid within a day. **Status: Phase 5 (polish for real users) done.** Everything runs
 on your laptop. Nothing talks to a real SMS, payment, bank or KYC service: those are all mocks.
 
 - Product spec: [docs/SPEC.md](docs/SPEC.md)
@@ -125,10 +125,17 @@ curl -s -X POST localhost:4000/dev/shifts/<shift-id>/start-now -H 'content-type:
 - **Ratings** after a shift, both ways, hidden until both sides rate. **Offer full-time job** from the roster:
   the worker can say no; contact details unlock only after they say yes and the business pays the fee.
 
-**5. Review as ops** (http://localhost:3001)
+**5. Languages, offline and messages**
+- Worker app in **हिंदी, ಕನ್ನಡ or English**. Tap **🔊** on key screens to hear them read aloud.
+- Messages (reminders, pay, offers) are written to an outbox and sent by a background job, in the worker's language.
+  They're mock-sent: see them in admin → **SMS outbox (dev)**. Worker app → **👤 Me → Messages** to opt in to WhatsApp or turn off reminders.
+- Turn your network off: the app shows the last saved shifts with the time they were saved, and keeps check-ins to send later.
+
+**6. Review as ops** (http://localhost:3001)
 - **verifier@** approves businesses and new sites; **compliance@** handles shift review (gender requirements),
   minimum wage rates and policy changes, both of which need a second compliance officer; **safety@** can pause a site.
 - A shift posted with words like "registration fee", "fair skin", "only girls" or "aadhaar copy" goes to **Shift review** instead of going live.
+- Everyone sees **Analytics**: fill rate, no-show rate, time to fill, payout delay, dispute rate, fraud flags (with a table view).
 - **finance@** sees held/failed payouts, approves manual payouts (a second finance login must approve), and runs **Reconciliation**.
 - **disputes@** decides disputed timesheet minutes and other dispute cases (with attendance and chat evidence), and strike appeals.
 - **safety@** runs the **Safety desk** (SOS, incidents) and can pause a site, which cancels its upcoming shifts with compensation.
@@ -214,3 +221,9 @@ docs/           Spec, abuse cases, decisions, legal checklist
 - **2FA code rejected**: codes change every 30 s and each one works once. Run `npm run totp` again.
 - **"Too many codes requested from this network"**: the local per-network OTP limit (10/hour). Wait, or `npm run db:reset`.
 - **Worker app on a real Android phone or emulator**: needs Android Studio or the Expo Go app. Not set up yet. Ask before installing either.
+
+## Real SMS / WhatsApp (not switched on)
+
+Adapters for MSG91 (SMS) and Gupshup (WhatsApp) are in `apps/api/src/adapters/messaging.ts` but stay off.
+They need a registered company, DLT-registered templates and a verified WhatsApp Business account, and they
+refuse to run unless `ALLOW_REAL_MESSAGES=true` is set. Don't set it until you've decided to go live.

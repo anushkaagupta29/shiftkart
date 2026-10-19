@@ -59,7 +59,8 @@ describe('SYS-09 waitlist', () => {
   });
 
   it('a waitlist offer notifies the worker by SMS (mock)', async () => {
-    const n = await ctx.db.query(`SELECT count(*)::int AS n FROM dev_outbox WHERE body LIKE '%slot opened%'`);
+    await (await import('../fixtures')).runJobs(ctx); // the dispatcher sends queued messages
+    const n = await ctx.db.query(`SELECT count(*)::int AS n FROM notifications WHERE template = 'waitlist_offer' AND status = 'sent'`);
     expect(n.rows[0].n).toBeGreaterThanOrEqual(2);
   });
 });

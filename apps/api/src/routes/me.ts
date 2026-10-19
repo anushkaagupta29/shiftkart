@@ -26,6 +26,20 @@ export async function meRoutes(app: FastifyInstance, { db, config }: AppDeps) {
     return { ok: true };
   });
 
+  // WhatsApp needs an explicit opt-in; reminders can be turned off. Critical messages (OTP, pay, safety) always go.
+  app.get('/me/notifications', { config: { auth: { user: {} } } }, async (req) => {
+    const u = (await db.query('SELECT whatsapp_opt_in_at, reminders_opt_out FROM users WHERE id = $1', [userActor(req).userId])).rows[0];
+    return { whatsappOptIn: Boolean(u.whatsapp_opt_in_at), remindersOptOut: u.reminders_opt_out };
+  });
+  app.put('/me/notifications', { config: { auth: { user: {} } } }, async (req) => {
+    const body = parse(z.object({ whatsappOptIn: z.boolean(), remindersOptOut: z.boolean() }).strict(), req.body);
+    await db.query(
+      `UPDATE users SET whatsapp_opt_in_at = CASE WHEN $2 THEN COALESCE(whatsapp_opt_in_at, now()) END, reminders_opt_out = $3 WHERE id = $1`,
+      [userActor(req).userId, body.whatsappOptIn, body.remindersOptOut],
+    );
+    return body;
+  });
+
   app.get('/me/sessions', { config: { auth: { user: {} } } }, async (req) => {
     const a = userActor(req);
     const r = await db.query(

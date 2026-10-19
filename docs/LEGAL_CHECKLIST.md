@@ -47,7 +47,7 @@ Nothing in this repo is legal advice or final legal text. Each item is something
 ## Platform
 - ☐ **L-27** Terms of service, privacy policy, worker agreement, business agreement. **To be drafted by a lawyer.** Placeholders in the app say "DRAFT — not final".
 - ☐ **L-28** IT Act intermediary obligations (grievance, takedown) for chat and listings.
-- ☐ **L-29** Masked calling and call-recording consent (if recorded). Telecom/TRAI rules on commercial SMS/WhatsApp (DLT registration).
+- ☐ **L-29** Masked calling and call-recording consent (if recorded). Telecom/TRAI rules on commercial SMS/WhatsApp: DLT registration of the sender and every template (`apps/api/src/notify/templates.ts`), quiet hours, WhatsApp opt-in wording.
 - ☐ **L-30** Trademark search for the name "ShiftKart" (closeness to "Flipkart").
 - ☐ **L-31** Process for indicators of bonded labour or trafficking; reporting to authorities.
 - ☐ **L-32** Company registration, plus any state registration as a platform/aggregator.

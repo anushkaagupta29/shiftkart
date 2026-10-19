@@ -50,3 +50,12 @@ pre { white-space: pre-wrap; word-break: break-word; margin: 0; }
   .main { padding: 16px; }
   table { display: block; overflow-x: auto; }
 }
+/* Charts: one series colour (validated light #2a78d6 / dark #3987e5), recessive grid. */
+:root { --series-1: #2a78d6; --series-1-wash: rgba(42, 120, 214, 0.10); --grid: #e6e8eb; --surface-1: var(--panel); }
+@media (prefers-color-scheme: dark) { :root { --series-1: #3987e5; --series-1-wash: rgba(57, 135, 229, 0.12); --grid: #2a2f3a; } }
+.tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 12px; margin-bottom: 16px; }
+.tile { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 14px; position: relative; }
+.tile .k { font-size: 12px; color: var(--muted); }
+.tile .v { font-size: 28px; font-weight: 650; font-variant-numeric: tabular-nums; margin: 2px 0 6px; }
+.tile .s { font-size: 12px; color: var(--muted); }
+.tip { position: absolute; pointer-events: none; background: var(--text); color: var(--bg); font-size: 12px; padding: 4px 8px; border-radius: 6px; white-space: nowrap; transform: translate(-50%, -110%); }

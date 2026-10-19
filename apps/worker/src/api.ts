@@ -1,5 +1,6 @@
 import { Platform } from 'react-native';
 import * as SecureStore from 'expo-secure-store';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Android emulator reaches the laptop at 10.0.2.2; web and iOS simulator at localhost.
 export const API_URL = process.env.EXPO_PUBLIC_API_URL ?? (Platform.OS === 'android' ? 'http://10.0.2.2:4000' : 'http://localhost:4000');
@@ -58,13 +59,24 @@ async function refresh(): Promise<boolean> {
 }
 
 export async function api<T = any>(path: string, opts: { method?: string; body?: unknown } = {}): Promise<T> {
-  const go = () => fetch(`${API_URL}${path}`, {
+  const goInit = async (): Promise<RequestInit> => ({
     method: opts.method ?? 'GET',
     headers: { ...(opts.body !== undefined ? { 'content-type': 'application/json' } : {}), ...(access ? { authorization: `Bearer ${access}` } : {}) },
     body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
   });
+  const go = async () => fetch(`${API_URL}${path}`, await goInit());
   let res: Response;
-  try { res = await go(); } catch { throw new ApiError(0, 'offline', 'No internet connection.'); }
+  // Slow 2G: one quiet retry for reads before giving up. Writes are never retried blindly.
+  const attempt = async () => {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 15_000);
+    try { return await fetch(`${API_URL}${path}`, { ...(await goInit()), signal: ctrl.signal }); } finally { clearTimeout(timer); }
+  };
+  try { res = await attempt(); }
+  catch {
+    if ((opts.method ?? 'GET') !== 'GET') throw new ApiError(0, 'offline', 'No internet connection.');
+    try { res = await attempt(); } catch { throw new ApiError(0, 'offline', 'No internet connection.'); }
+  }
   if (res.status === 401 && !path.startsWith('/auth/') && (await refresh())) res = await go();
   const data = await res.json().catch(() => null);
   if (!res.ok) throw new ApiError(res.status, data?.error?.code ?? 'error', data?.error?.message ?? 'Something went wrong.');
@@ -77,10 +89,29 @@ export const rupees = (paise: number) => {
   return `₹${rest ? rest + ',' : ''}${last3}${p ? '.' + String(p).padStart(2, '0') : ''}`;
 };
 
+const LOCALE: Record<string, string> = { hi: 'hi-IN', kn: 'kn-IN', en: 'en-IN' };
 export const istTime = (iso: string, lang: string) =>
-  new Date(iso).toLocaleTimeString(lang === 'hi' ? 'hi-IN' : 'en-IN', { timeZone: 'Asia/Kolkata', hour: 'numeric', minute: '2-digit' });
+  new Date(iso).toLocaleTimeString(LOCALE[lang] ?? 'en-IN', { timeZone: 'Asia/Kolkata', hour: 'numeric', minute: '2-digit' });
 export const istDay = (iso: string, lang: string) =>
-  new Date(iso).toLocaleDateString(lang === 'hi' ? 'hi-IN' : 'en-IN', { timeZone: 'Asia/Kolkata', weekday: 'short', day: 'numeric', month: 'short' });
+  new Date(iso).toLocaleDateString(LOCALE[lang] ?? 'en-IN', { timeZone: 'Asia/Kolkata', weekday: 'short', day: 'numeric', month: 'short' });
+
+/**
+ * Low-bandwidth / offline: the last good copy of a screen's data is kept on the phone. If the
+ * network fails, the screen shows that copy with the time it was saved instead of an empty page.
+ */
+export async function cached<T>(key: string, load: () => Promise<T>): Promise<{ data: T; offlineSince: string | null }> {
+  try {
+    const data = await load();
+    AsyncStorage.setItem(`cache:${key}`, JSON.stringify({ at: new Date().toISOString(), data })).catch(() => {});
+    return { data, offlineSince: null };
+  } catch (e) {
+    if (!(e instanceof ApiError) || e.code !== 'offline') throw e;
+    const raw = await AsyncStorage.getItem(`cache:${key}`).catch(() => null);
+    if (!raw) throw e;
+    const c = JSON.parse(raw) as { at: string; data: T };
+    return { data: c.data, offlineSince: c.at };
+  }
+}
 
 // Offline queue for check-in/out: if there's no network, the scan is saved with the time it happened
 // and sent later. The server trusts the gate code's time, not the phone's clock (SYS-08).

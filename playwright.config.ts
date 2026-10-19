@@ -19,7 +19,7 @@ export default defineConfig({
   },
   projects: [
     { name: 'business-desktop', testMatch: /business\.spec\.ts/, use: { ...devices['Desktop Chrome'] } },
-    { name: 'worker-android', testMatch: /worker\.spec\.ts/, use: { ...devices['Pixel 7'] } },
+    { name: 'worker-android', testMatch: /(worker|kannada)\.spec\.ts/, use: { ...devices['Pixel 7'] } },
     { name: 'shift-day', testMatch: /shift-day\.spec\.ts/ },
     { name: 'trust', testMatch: /trust\.spec\.ts/ },
   ],

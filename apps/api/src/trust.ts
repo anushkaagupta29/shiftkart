@@ -1,4 +1,4 @@
-import { applyBasisPoints, decrypt } from '@shiftkart/shared';
+import { applyBasisPoints } from '@shiftkart/shared';
 import type { Db, Queryable, Tx } from './db';
 import { withTx } from './db';
 import { writeAudit } from './audit';
@@ -10,13 +10,14 @@ import { offerNextOrRelease } from './booking';
 import { settleShift } from './money';
 import type { PayoutProvider } from './adapters/payouts';
 import type { SmsSender } from './adapters/sms';
+import { notify, notifyBusiness } from './notify/notify';
+import type { TemplateName } from './notify/templates';
 
 type Notify = { sms: SmsSender; dataKey: string };
 
-async function textWorker(tx: Queryable, n: Notify | undefined, workerId: string, body: string) {
+async function textWorker(tx: Queryable, n: Notify | undefined, workerId: string, template: TemplateName, vars: Record<string, string | number>, dedupeKey: string) {
   if (!n) return;
-  const u = (await tx.query('SELECT phone_enc FROM users WHERE id = $1', [workerId])).rows[0];
-  if (u) await n.sms.send(decrypt(u.phone_enc, n.dataKey), body);
+  await notify(tx, { dataKey: n.dataKey }, { userId: workerId, template, vars, dedupeKey });
 }
 
 /** Pays a worker from the shift's escrow without a platform fee (we take nothing from cancellations). */
@@ -55,7 +56,7 @@ async function turnAwayAmount(tx: Tx, shift: Record<string, any>) {
 export async function cancelLiveShift(
   db: Db, provider: PayoutProvider, shiftId: string,
   by: { kind: 'business' | 'ops' | 'site_paused'; userId?: string; staffId?: string; businessId?: string },
-  reason: string, notify?: Notify, ip?: string,
+  reason: string, notifyArg?: Notify, ip?: string,
 ) {
   const result = await withTx(db, async (tx) => {
     const s = (await tx.query('SELECT * FROM shifts WHERE id = $1 FOR UPDATE', [shiftId])).rows[0];
@@ -80,7 +81,8 @@ export async function cancelLiveShift(
         await tx.query(`UPDATE bookings SET status = 'cancelled_business', cancelled_at = now(), cancel_hours_before = $2 WHERE id = $1`, [b.id, Math.max(-999, Math.round(hoursBefore * 100) / 100)]);
         total += amount;
       }
-      await textWorker(tx, notify, b.worker_id, cancelMessage(b, s));
+      const paid = Number((await tx.query('SELECT amount_paise FROM compensations WHERE booking_id = $1', [b.id])).rows[0]?.amount_paise ?? 0);
+      await textWorker(tx, notifyArg, b.worker_id, 'shift_cancelled', { title: s.title, paise: paid }, `cancel:${b.id}`);
     }
     await tx.query(`UPDATE waitlist_entries SET status = 'expired' WHERE shift_id = $1 AND status IN ('waiting', 'offered')`, [shiftId]);
     await tx.query(`UPDATE shifts SET status = 'cancelled', cancelled_at = now(), cancel_reason = $2, cancelled_by = $3, filled_count = 0 WHERE id = $1`, [shiftId, reason, by.kind]);
@@ -95,13 +97,10 @@ export async function cancelLiveShift(
   await settleShift(db, provider, shiftId);
   return result;
 
-  function cancelMessage(b: Record<string, any>, s: Record<string, any>) {
-    return `ShiftKart: "${s.title}" was cancelled by the business. ${b.status === 'checked_in' ? 'You have been paid the turn-away amount.' : 'Any compensation due is on its way to your account.'} This does not affect your score.`;
-  }
 }
 
 /** PAY-11: a worker who arrived and was sent away (site not ready) gets the turn-away minimum. */
-export async function turnAway(db: Db, biz: { businessId: string; userId: string }, bookingId: string, reason: string, notify?: Notify, ip?: string) {
+export async function turnAway(db: Db, biz: { businessId: string; userId: string }, bookingId: string, reason: string, notifyArg?: Notify, ip?: string) {
   return withTx(db, async (tx) => {
     const b = (await tx.query(`SELECT b.*, s.business_id FROM bookings b JOIN shifts s ON s.id = b.shift_id WHERE b.id = $1 FOR UPDATE OF b`, [bookingId])).rows[0];
     if (!b || b.business_id !== biz.businessId) throw notFound();
@@ -110,7 +109,7 @@ export async function turnAway(db: Db, biz: { businessId: string; userId: string
     const t = await turnAwayAmount(tx, s);
     await payCompensation(tx, s, b, 'turned_away', t.amount, t.rule, null);
     await tx.query(`UPDATE bookings SET status = 'turned_away', turned_away_at = now(), turn_away_reason = $2 WHERE id = $1`, [bookingId, reason]);
-    await textWorker(tx, notify, b.worker_id, `ShiftKart: you were sent home from "${s.title}". You are being paid ₹${(t.amount / 100).toFixed(2)} for turning up.`);
+    await textWorker(tx, notifyArg, b.worker_id, 'turned_away', { title: s.title, paise: t.amount }, `turned_away:${b.id}`);
     await writeAudit(tx, { actorType: 'user', actorId: biz.userId, action: 'booking.turned_away', targetType: 'booking', targetId: bookingId, reason, after: { amountPaise: t.amount }, ip });
     return { status: 'turned_away', compensationPaise: t.amount };
   });
@@ -192,7 +191,7 @@ export async function appealStrike(db: Db, workerId: string, strikeId: string, r
   });
 }
 
-export async function decideAppeal(db: Db, staff: { staffId: string; roles: string[] }, strikeId: string, overturn: boolean, reason: string, notify?: Notify, ip?: string) {
+export async function decideAppeal(db: Db, staff: { staffId: string; roles: string[] }, strikeId: string, overturn: boolean, reason: string, notifyArg?: Notify, ip?: string) {
   return withTx(db, async (tx) => {
     const s = (await tx.query(
       `UPDATE strikes SET status = $2, decision_reason = $3, decided_by = $4, decided_at = now() WHERE id = $1 AND status = 'appealed' RETURNING *`,
@@ -200,7 +199,7 @@ export async function decideAppeal(db: Db, staff: { staffId: string; roles: stri
     )).rows[0];
     if (!s) throw conflict('not_appealed', 'No open appeal on this strike.');
     await afterStrike(tx, s.worker_id);
-    await textWorker(tx, notify, s.worker_id, `ShiftKart: your appeal was ${overturn ? 'accepted. The strike is removed' : 'not accepted'}. ${reason}`);
+    await textWorker(tx, notifyArg, s.worker_id, 'appeal_decided', { accepted: overturn ? 1 : 0, reason }, `appeal:${strikeId}`);
     await writeAudit(tx, { actorType: 'staff', actorId: staff.staffId, actorRoles: staff.roles, action: overturn ? 'strike.overturned' : 'strike.upheld', targetType: 'strike', targetId: strikeId, reason, ip });
     return { status: overturn ? 'overturned' : 'upheld' };
   });
@@ -224,6 +223,8 @@ export async function cancelByWorker(db: Db, workerId: string, bookingId: string
     let strike = null;
     if (hours < (await lateCancelHours(tx))) strike = await recordStrike(tx, workerId, bookingId, 'late_cancel', hours, opts.emergency);
     else if (opts.emergency) throw badRequest('not_needed', 'You are cancelling early enough: no emergency needed.');
+    const sh = (await tx.query('SELECT business_id, title FROM shifts WHERE id = $1', [b.shift_id])).rows[0];
+    await notifyBusiness(tx, { dataKey: notify.dataKey }, sh.business_id, 'worker_cancelled', { title: sh.title, slot }, `wcancel:${bookingId}`);
     await writeAudit(tx, { actorType: 'user', actorId: workerId, action: 'booking.cancel_worker', targetType: 'booking', targetId: bookingId, after: { hoursBefore: hours, strike: strike?.status ?? null } });
     return { id: b.id, status: b.status, hoursBefore: hours, slot, strike };
   });

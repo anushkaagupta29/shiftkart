@@ -33,7 +33,10 @@ describe('Phase 2 journey', () => {
     feed = (await ctx.app.inject({ method: 'POST', url: '/worker/shifts/search', headers: w.auth, payload: {} })).json();
     const seen = feed.items.find((s: { id: string }) => s.id === shift.id);
     expect(seen).toMatchObject({ slotsLeft: 5, eligible: true, pay: { hourlyPaise: 10000, totalPaise: 75000, takeHomePaise: 80000 } });
-    expect(seen.address).toBeTruthy();
+    // The list is compact; the full address, dress code etc. come with the shift detail.
+    const full = (await ctx.app.inject({ method: 'GET', url: `/worker/shifts/${shift.id}`, headers: w.auth })).json();
+    expect(full.address).toBeTruthy();
+    expect(full.dressCode).toBe('Closed shoes');
 
     const acc = await ctx.app.inject({ method: 'POST', url: `/worker/shifts/${shift.id}/accept`, headers: w.auth });
     expect(acc.statusCode).toBe(201);

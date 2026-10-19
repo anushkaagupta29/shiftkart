@@ -74,7 +74,9 @@ Actors: 🏢 business · 👷 worker · 🧑‍💼 our staff · 🌐 outsider �
 | SAF-03 Night shifts | ✅ Phase 4 (transport promise + worker consent) | `abuse/TRUST.test.ts` |
 | SAF-04 Site pause | ✅ Phase 2 + 4 (pause cancels upcoming shifts with compensation) | `abuse/SYS-09.test.ts`, `abuse/TRUST.test.ts` |
 | WRK-06 Underage | ✅ Phase 2 + 4 (ID-based age; supervisor report → review) | `abuse/WRK-01.test.ts`, `abuse/COMMUNITY.test.ts` |
-| End-to-end journeys | ✅ business signup → live shift; worker Hindi signup → accept; shift day → paid; trust (scam message blocked, SOS on safety desk, late cancel compensated) | `e2e/*.spec.ts` (repo root) |
+| Low bandwidth / offline (SPEC §7) | ✅ Phase 5 (compressed responses, compact feed under 50 KB, offline cache and queued check-ins) | `integration/low-bandwidth.test.ts` |
+| Notifications (outbox, language, opt-in, quiet hours, real providers off) | ✅ Phase 5 | `integration/notifications.test.ts` |
+| End-to-end journeys | ✅ business signup → live shift; worker Hindi signup → accept; shift day → paid; trust (scam message blocked, SOS on safety desk, late cancel compensated); Kannada screens and errors | `e2e/*.spec.ts` (repo root) |
 | All others | ⏳ Planned for the phase listed on each case | — |
 
 ---|---|---|

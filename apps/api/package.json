@@ -10,6 +10,7 @@
     "typecheck": "tsc -p ."
   },
   "dependencies": {
+    "@fastify/compress": "^8.3.1",
     "@fastify/cookie": "^11.1.3",
     "@fastify/cors": "^10.1.0",
     "@fastify/helmet": "^13.2.0",

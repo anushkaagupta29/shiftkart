@@ -53,7 +53,7 @@ export async function workerAttendanceRoutes(app: FastifyInstance, { db, config,
   app.get('/worker/bookings/:id/attendance', { config: workerAuth }, async (req) => {
     const a = userActor(req);
     const { id } = parse(IdParam, req.params);
-    const b = (await db.query(`SELECT id, status, shift_id FROM bookings WHERE id = $1 AND worker_id = $2`, [id, a.userId])).rows[0];
+    const b = (await db.query(`SELECT id, status, shift_id, confirmed_attendance FROM bookings WHERE id = $1 AND worker_id = $2`, [id, a.userId])).rows[0];
     if (!b) throw notFound();
     const ev = await db.query(
       `SELECT id, type, mode, status, effective_at, flags FROM attendance_events WHERE booking_id = $1 AND status <> 'rejected' ORDER BY effective_at`, [id]);
@@ -61,7 +61,7 @@ export async function workerAttendanceRoutes(app: FastifyInstance, { db, config,
     const ot = await db.query(`SELECT id, extra_minutes, worker_pay_paise, status FROM overtime_requests WHERE booking_id = $1 ORDER BY created_at DESC`, [id]);
     const ts = (await db.query(`SELECT id, status, payable_minutes, overtime_minutes, gross_paise, disputed_paise, approval_deadline FROM timesheets WHERE booking_id = $1`, [id])).rows[0];
     return {
-      bookingStatus: b.status, onBreak: lastBreak?.type === 'break_start',
+      bookingStatus: b.status, confirmedAttendance: b.confirmed_attendance, onBreak: lastBreak?.type === 'break_start',
       events: ev.rows.map((e) => ({ id: e.id, type: e.type, mode: e.mode, status: e.status, at: e.effective_at, flags: e.flags })),
       overtime: ot.rows.map((o) => ({ id: o.id, extraMinutes: o.extra_minutes, workerPayPaise: Number(o.worker_pay_paise), status: o.status })),
       timesheet: ts ? { id: ts.id, status: ts.status, minutes: ts.payable_minutes + ts.overtime_minutes, grossPaise: Number(ts.gross_paise), heldPaise: Number(ts.disputed_paise ?? 0), approvalDeadline: ts.approval_deadline } : null,

@@ -152,6 +152,7 @@ import { gateCode, qrStep, shiftKey } from '../src/domain/qr';
 import { runJobsOnce } from '../src/jobs';
 import { MockPayouts } from '../src/adapters/payouts';
 import { MockSms } from '../src/adapters/sms';
+import { MockSender } from '../src/adapters/messaging';
 
 /** Moves a live shift so it started `minutesAgo` minutes ago (keeps its length). */
 export async function startShiftAgo(ctx: Ctx, shiftId: string, minutesAgo = 5) {
@@ -202,5 +203,5 @@ export async function workedShift(ctx: Ctx, b: Biz, over: Record<string, unknown
 }
 
 export async function runJobs(ctx: Ctx) {
-  return runJobsOnce({ db: ctx.db, sms: new MockSms(ctx.db, ctx.config.hashKey), payouts: new MockPayouts(ctx.db), dataKey: ctx.config.dataKey });
+  return runJobsOnce({ db: ctx.db, sms: new MockSms(ctx.db, ctx.config.hashKey), payouts: new MockPayouts(ctx.db), dataKey: ctx.config.dataKey, senders: { sms: new MockSender('sms', ctx.db, ctx.config.hashKey), whatsapp: new MockSender('whatsapp', ctx.db, ctx.config.hashKey) } });
 }

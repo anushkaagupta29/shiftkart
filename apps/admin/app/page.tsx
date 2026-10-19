@@ -39,7 +39,7 @@ function Dashboard() {
       </div>
       <div className="panel">
         <h3 style={{ marginTop: 0 }}>Metrics</h3>
-        <p className="muted">{METRICS.join(' · ')}: dashboards arrive in Phase 5, once shifts and payouts exist.</p>
+        <p className="muted">{METRICS.join(' · ')}: see <a href="/analytics">Analytics</a>.</p>
       </div>
     </>
   );

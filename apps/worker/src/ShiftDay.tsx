@@ -1,13 +1,15 @@
 import * as Location from 'expo-location';
+import { CameraView, useCameraPermissions } from 'expo-camera';
+import { Platform } from 'react-native';
 import { useCallback, useEffect, useState } from 'react';
 import { View } from 'react-native';
 import { ApiError, api, istDay, istTime, loadPending, rupees, savePending } from './api';
 import { useBusy, type P, type Shift } from './common';
-import { Banner, Big, Card, Chip, Field, Screen, T } from './ui';
+import { Banner, Big, Card, Chip, Field, Screen, Speak, T } from './ui';
 import { AfterShiftCard } from './Trust';
 
 type Attendance = {
-  bookingStatus: string; onBreak: boolean;
+  bookingStatus: string; confirmedAttendance: boolean | null; onBreak: boolean;
   events: { id: string; type: string; mode: string; status: string; at: string; flags: string[] }[];
   overtime: { id: string; extraMinutes: number; workerPayPaise: number; status: string }[];
   timesheet: { id: string; status: string; minutes: number; grossPaise: number; heldPaise: number; approvalDeadline: string } | null;
@@ -38,6 +40,8 @@ export function BookingScreen(props: P & { bookingId: string; shiftId: string })
   const [fakeGps, setFakeGps] = useState(false);
   const [rooted, setRooted] = useState(false);
   const [note, setNote] = useState('');
+  const [scanning, setScanning] = useState(false);
+  const [camPerm, askCam] = useCameraPermissions();
   const { busy, run } = useBusy(setError);
 
   const load = useCallback(async () => {
@@ -81,8 +85,17 @@ export function BookingScreen(props: P & { bookingId: string; shiftId: string })
 
   const codeEntry = (kind: 'check-in' | 'check-out') => (
     <Card>
-      <Field testID="gate-code" label={`🔢 ${t.enterCode}`} keyboardType="number-pad" maxLength={6} value={code} onChangeText={setCode} />
+      {Platform.OS !== 'web' && (scanning ? (
+        <View style={{ height: 260, borderRadius: 12, overflow: 'hidden', marginVertical: 6 }}>
+          <CameraView style={{ flex: 1 }} facing="back" barcodeScannerSettings={{ barcodeTypes: ['qr'] }}
+            onBarcodeScanned={({ data }) => { if (data.startsWith('sk1.')) { setCode(data); setScanning(false); } }} />
+        </View>
+      ) : (
+        <Big kind="secondary" icon="📷" label={t.scanQr} onPress={async () => { const p = camPerm?.granted ? camPerm : await askCam(); if (p?.granted) setScanning(true); else setLocMsg(t.cameraDenied); }} />
+      ))}
+      {code.startsWith('sk1.') ? <Banner kind="ok" text={`✓ QR`} /> : <Field testID="gate-code" label={`🔢 ${t.enterCode}`} keyboardType="number-pad" maxLength={6} value={code} onChangeText={setCode} />}
       <T muted>{t.codeHelp}</T>
+      <Speak lang={lang} label={t.listen} text={`${t.codeHelp} ${t.enterCode}. ${t.selfieNext}`} />
       <T style={{ marginTop: 8 }}>📍 {locMsg || t.locating}{fix ? ` (±${fix.accuracyM} m)` : ''}</T>
       {__DEV__ && (
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', marginTop: 6 }}>
@@ -92,7 +105,7 @@ export function BookingScreen(props: P & { bookingId: string; shiftId: string })
         </View>
       )}
       <T muted style={{ marginTop: 6 }}>🤳 {t.selfieNext}</T>
-      <Big testID={kind} label={kind === 'check-in' ? t.checkIn : t.checkOut} icon={kind === 'check-in' ? '✅' : '🏁'} busy={busy} disabled={code.trim().length !== 6} onPress={() => clock(kind)} />
+      <Big testID={kind} label={kind === 'check-in' ? t.checkIn : t.checkOut} icon={kind === 'check-in' ? '✅' : '🏁'} busy={busy} disabled={!(code.trim().length === 6 || code.startsWith('sk1.'))} onPress={() => clock(kind)} />
     </Card>
   );
 
@@ -106,6 +119,13 @@ export function BookingScreen(props: P & { bookingId: string; shiftId: string })
         <View style={{ flex: 1, marginLeft: 4 }}><Big testID="open-safety" kind={att.bookingStatus === 'checked_in' ? 'danger' : 'secondary'} icon="🛡️" label={att.bookingStatus === 'checked_in' ? 'SOS' : t.safety} onPress={() => go({ name: 'safety', bookingId })} /></View>
       </View>
 
+      {att.bookingStatus === 'confirmed' && att.confirmedAttendance === null && (
+        <Card>
+          <T bold>🙋 {t.areYouComing}</T>
+          <Big testID="coming-yes" label={t.imComing} busy={busy} onPress={() => run(async () => { await api(`/worker/bookings/${bookingId}/intent`, { method: 'POST', body: { coming: true } }); setNote(t.comingSaved); await load(); })} />
+          <Big testID="coming-no" kind="secondary" label={t.cantCome} busy={busy} onPress={() => run(async () => { await api(`/worker/bookings/${bookingId}/intent`, { method: 'POST', body: { coming: false } }); go({ name: 'shift', id: shiftId }); })} />
+        </Card>
+      )}
       {att.bookingStatus === 'confirmed' && codeEntry('check-in')}
 
       {att.bookingStatus === 'checked_in' && (

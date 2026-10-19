@@ -1,4 +1,5 @@
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useColorScheme, type TextInputProps } from 'react-native';
+import * as Speech from 'expo-speech';
 
 export const palette = (dark: boolean) => ({
   bg: dark ? '#0f1115' : '#f4f6f8', card: dark ? '#191c23' : '#ffffff', text: dark ? '#eef0f4' : '#14161a', muted: dark ? '#9aa3b2' : '#5b6370',
@@ -67,6 +68,18 @@ export function Chip({ label, on, onPress, testID }: { label: string; on: boolea
     <Pressable testID={testID} accessibilityRole="checkbox" accessibilityState={{ checked: on }} onPress={onPress}
       style={{ paddingVertical: 10, paddingHorizontal: 16, borderRadius: 99, borderWidth: 1, margin: 4, borderColor: on ? c.green : c.border, backgroundColor: on ? c.green : c.card }}>
       <Text style={{ color: on ? c.greenText : c.text, fontSize: 17 }}>{on ? '✓ ' : ''}{label}</Text>
+    </Pressable>
+  );
+}
+
+/** Reads the screen's main instruction aloud, for people more comfortable listening than reading. */
+export function Speak({ text, lang, label }: { text: string; lang: string; label: string }) {
+  const c = useColors();
+  const voice = lang === 'hi' ? 'hi-IN' : lang === 'kn' ? 'kn-IN' : 'en-IN';
+  return (
+    <Pressable accessibilityRole="button" accessibilityLabel={label} onPress={() => { Speech.stop(); Speech.speak(text, { language: voice, rate: 0.9 }); }}
+      style={{ alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', paddingVertical: 8, paddingHorizontal: 14, borderRadius: 99, borderWidth: 1, borderColor: c.border, backgroundColor: c.card, marginVertical: 4 }}>
+      <Text style={{ fontSize: 20 }}>🔊</Text><Text style={{ color: c.text, fontSize: 16, marginLeft: 6 }}>{label}</Text>
     </Pressable>
   );
 }

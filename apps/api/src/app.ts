@@ -3,6 +3,7 @@ import cookie from '@fastify/cookie';
 import cors from '@fastify/cors';
 import helmet from '@fastify/helmet';
 import rateLimit from '@fastify/rate-limit';
+import compress from '@fastify/compress';
 import type { Config } from './config';
 import type { Db } from './db';
 import { MockSms, type SmsSender } from './adapters/sms';
@@ -29,6 +30,7 @@ import { workerAttendanceRoutes } from './routes/worker-attendance';
 import { businessAttendanceRoutes } from './routes/business-attendance';
 import { adminFinanceRoutes } from './routes/admin-finance';
 import { trustRoutes } from './routes/trust-routes';
+import { analyticsRoutes } from './routes/analytics';
 import './auth/types';
 
 export type AppDeps = {
@@ -52,6 +54,8 @@ export async function buildApp(config: Config, db: Db, opts: { sms?: SmsSender; 
   };
 
   await app.register(helmet);
+  // Worker phones are often on 2G/3G: compress anything over 1 KB (brotli or gzip).
+  await app.register(compress, { global: true, threshold: 1024, encodings: ['br', 'gzip'] });
   await app.register(cors, { origin: config.corsOrigins, credentials: true });
   await app.register(cookie);
   await app.register(rateLimit, { max: config.rateLimitPerMin, timeWindow: '1 minute' });
@@ -92,6 +96,7 @@ export async function buildApp(config: Config, db: Db, opts: { sms?: SmsSender; 
   await app.register(async (s) => businessAttendanceRoutes(s, deps));
   await app.register(async (s) => adminFinanceRoutes(s, deps));
   await app.register(async (s) => trustRoutes(s, deps));
+  await app.register(async (s) => analyticsRoutes(s, deps));
   if (config.devEndpoints && config.env !== 'production') await app.register(async (s) => devRoutes(s, deps));
 
   return app;

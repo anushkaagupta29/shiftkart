@@ -1,13 +1,16 @@
 import type { Db } from './db';
 import type { SmsSender } from './adapters/sms';
 import type { PayoutProvider } from './adapters/payouts';
+import type { MessageSender } from './adapters/messaging';
+import { dispatchNotifications } from './notify/notify';
+import { queueReminders } from './notify/reminders';
 import { sweepExpiredOffers } from './booking';
 import { autoApproveDue, processPayouts, reconcile, settleShifts } from './money';
 import { istDate } from './time';
 import { revealDueRatings } from './community';
 import { disputeSlaCheck } from './cases';
 
-export type JobDeps = { db: Db; sms: SmsSender; payouts: PayoutProvider; dataKey: string };
+export type JobDeps = { db: Db; sms: SmsSender; payouts: PayoutProvider; dataKey: string; senders: { sms: MessageSender; whatsapp: MessageSender } };
 
 /**
  * One pass of all background work. Every job is safe to run twice at once: work is claimed with
@@ -21,6 +24,9 @@ export async function runJobsOnce(d: JobDeps) {
     shiftsSettled: await settleShifts(d.db, d.payouts),
     ratingsRevealed: await revealDueRatings(d.db),
     disputesOverdue: await disputeSlaCheck(d.db),
+    remindersQueued: await queueReminders(d.db, d.dataKey),
+    // Last, so messages queued by the jobs above go out in the same pass.
+    messagesSent: await dispatchNotifications(d.db, d.senders, { dataKey: d.dataKey }),
   };
 }
 

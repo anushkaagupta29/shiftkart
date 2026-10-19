@@ -4,12 +4,13 @@ import { buildApp } from './app';
 import { startJobs } from './jobs';
 import { MockSms } from './adapters/sms';
 import { MockPayouts } from './adapters/payouts';
+import { sendersFromEnv } from './adapters/messaging';
 
 const config = loadConfig();
 const db = createPool(config.databaseUrl);
 const app = await buildApp(config, db);
 await app.listen({ port: config.port, host: '127.0.0.1' });
-const stopJobs = startJobs({ db, sms: new MockSms(db, config.hashKey), payouts: new MockPayouts(db), dataKey: config.dataKey }, app.log);
+const stopJobs = startJobs({ db, sms: new MockSms(db, config.hashKey), payouts: new MockPayouts(db), dataKey: config.dataKey, senders: sendersFromEnv(db, config.hashKey) }, app.log);
 
 for (const sig of ['SIGINT', 'SIGTERM'] as const) {
   process.on(sig, async () => {

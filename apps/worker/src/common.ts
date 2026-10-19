@@ -27,7 +27,10 @@ export type Route =
 
 export type Tab = 'shifts' | 'mine' | 'offers' | 'earnings';
 
-export const showError = (e: unknown) => (e instanceof ApiError ? e.message : 'Something went wrong.');
+// Errors are shown in the worker's language using the API's error code; the server's English text is the fallback.
+let errorText: Record<string, string> = {};
+export function setErrorStrings(m: Record<string, string>) { errorText = m; }
+export const showError = (e: unknown) => (e instanceof ApiError ? errorText[e.code] ?? e.message : errorText.internal ?? 'Something went wrong.');
 export type P = { t: Strings; lang: Lang; go: (r: Route) => void; setError: (s: string) => void; refreshMe: () => Promise<Me>; me: Me | null; afterLogin: () => Promise<void> };
 
 export function useBusy(setError: (s: string) => void) {

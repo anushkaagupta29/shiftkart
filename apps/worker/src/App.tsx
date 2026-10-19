@@ -1,12 +1,13 @@
 import { StatusBar } from 'expo-status-bar';
+import NetInfo from '@react-native-community/netinfo';
 import { useCallback, useEffect, useState } from 'react';
 import { Alert, Platform, View } from 'react-native';
-import { ApiError, api, clearSession, deviceId, flushPending, istDay, istTime, loadPending, loadSession, rupees, saveTokens } from './api';
+import { ApiError, api, cached, clearSession, deviceId, flushPending, istDay, istTime, loadPending, loadSession, rupees, saveTokens } from './api';
 import { STRINGS, type Lang, type T as Strings } from './i18n';
-import { showError, useBusy, type Booking, type Me, type Offer, type P, type Ref, type Route, type Shift, type Tab } from './common';
+import { setErrorStrings, showError, useBusy, type Booking, type Me, type Offer, type P, type Ref, type Route, type Shift, type Tab } from './common';
 import { BookingScreen, EarningsTab, PayslipScreen, PendingConfirmations } from './ShiftDay';
 import { ChatScreen, DisputeScreen, HireOffers, MeScreen, SafetyScreen } from './Trust';
-import { Banner, Big, Card, Chip, Field, Screen, T, useColors } from './ui';
+import { Banner, Big, Card, Chip, Field, Screen, Speak, T, useColors } from './ui';
 
 const LANG_NAMES: Record<string, string> = { hi: 'हिंदी', en: 'English', kn: 'ಕನ್ನಡ', ta: 'தமிழ்', te: 'తెలుగు', mr: 'मराठी', bn: 'বাংলা', ur: 'اردو', ml: 'മലയാളം' };
 
@@ -17,6 +18,9 @@ export default function App() {
   const [error, setError] = useState('');
   const t = STRINGS[lang];
   const c = useColors();
+  useEffect(() => { setErrorStrings(t.errors); }, [t]);
+  // When the phone comes back online, send any check-ins saved while offline.
+  useEffect(() => NetInfo.addEventListener((s) => { if (s.isConnected) flushPending().catch(() => {}); }), []);
 
   const go = useCallback((r: Route) => { setError(''); setRoute(r); }, []);
   const refreshMe = useCallback(async () => {
@@ -63,20 +67,23 @@ export default function App() {
 
 function LangScreen({ onPick }: { onPick: (l: Lang) => void }) {
   return (
-    <Screen title="भाषा / Language">
+    <Screen title="भाषा / ಭಾಷೆ / Language">
       <Big testID="lang-hi" label="हिंदी" onPress={() => onPick('hi')} />
+      <Big testID="lang-kn" label="ಕನ್ನಡ" onPress={() => onPick('kn')} kind="secondary" />
       <Big testID="lang-en" label="English" onPress={() => onPick('en')} kind="secondary" />
-      <T muted>ಕನ್ನಡ: coming soon</T>
+      <Speak lang="hi" label="सुनें" text="अपनी भाषा चुनें। हिंदी के लिए पहला बटन दबाएं।" />
+      <Speak lang="kn" label="ಆಲಿಸಿ" text="ನಿಮ್ಮ ಭಾಷೆ ಆಯ್ಕೆಮಾಡಿ. ಕನ್ನಡಕ್ಕಾಗಿ ಎರಡನೇ ಬಟನ್ ಒತ್ತಿ." />
       <Banner text={STRINGS.hi.noFees} />
     </Screen>
   );
 }
 
-function PhoneScreen({ t, go, setError }: P) {
+function PhoneScreen({ t, lang, go, setError }: P) {
   const [phone, setPhone] = useState('');
   const { busy, run } = useBusy(setError);
   return (
     <Screen title={t.phoneTitle} onBack={() => go({ name: 'lang' })} backLabel={t.back}>
+      <Speak lang={lang} label={t.listen} text={`${t.phoneTitle}. ${t.noFees}`} />
       <Field testID="phone" label="📱 +91" keyboardType="phone-pad" value={phone} onChangeText={setPhone} maxLength={14} autoFocus />
       <Big testID="send-code" label={t.sendCode} busy={busy} disabled={phone.replace(/\D/g, '').length < 10}
         onPress={() => run(async () => { await api('/auth/otp/request', { method: 'POST', body: { phone } }); go({ name: 'code', phone }); })} />
@@ -136,7 +143,7 @@ function ConsentScreen({ t, lang, go, setError, afterLogin, phone, code }: P & {
 
 // ------------------------------------------------------------------ onboarding
 
-function SetupScreen({ t, go, setError, refreshMe, me }: P) {
+function SetupScreen({ t, lang, go, setError, refreshMe, me }: P) {
   const { busy, run } = useBusy(setError);
   // Once on mount: refresh the checklist (e.g. after ops clear a review).
   useEffect(() => { refreshMe().then((m) => { if (m.verificationStatus === 'verified') go({ name: 'home', tab: 'shifts' }); }).catch(() => {}); }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -153,6 +160,7 @@ function SetupScreen({ t, go, setError, refreshMe, me }: P) {
   const enabled = (k: string) => k === 'identity' || k === 'profile' || s.identity === 'verified';
   return (
     <Screen title={t.setupTitle}>
+      <Speak lang={lang} label={t.listen} text={`${t.setupTitle}. 1. ${t.stepIdentity}. 2. ${t.stepSelfie}. 3. ${t.stepPayout}. 4. ${t.stepProfile}.`} />
       {me.verificationStatus === 'review' && <Banner text={t.underReview} />}
       {me.verificationStatus === 'rejected' && <Banner kind="error" text={me.kycRejectReason === 'underage' ? 'You must be 18 or older. / आपकी उम्र 18 साल या उससे ज़्यादा होनी चाहिए।' : t.underReview} />}
       {rows.map(([k, icon, label, onPress]) => (
@@ -284,10 +292,16 @@ function HomeScreen(props: P & { tab: Tab }) {
   const [offers, setOffers] = useState<Offer[]>([]);
   const [radiusKm, setRadiusKm] = useState<number | null>(null);
   const [saved, setSaved] = useState(0);
+  const [offlineSince, setOfflineSince] = useState<string | null>(null);
   const { busy, run } = useBusy(setError);
   const load = useCallback(() => run(async () => {
-    const [f, b, o] = await Promise.all([api('/worker/shifts/search', { method: 'POST', body: {} }), api<Booking[]>('/worker/bookings'), api<Offer[]>('/worker/offers')]);
-    setShifts(f.items); setBookings(b); setOffers(o); setRadiusKm(f.radiusKm);
+    const [f, b, o] = await Promise.all([
+      cached('feed', () => api('/worker/shifts/search', { method: 'POST', body: {} })),
+      cached('bookings', () => api<Booking[]>('/worker/bookings')),
+      cached('offers', () => api<Offer[]>('/worker/offers')),
+    ]);
+    setShifts(f.data.items); setBookings(b.data); setOffers(o.data); setRadiusKm(f.data.radiusKm);
+    setOfflineSince(f.offlineSince ?? b.offlineSince);
     await flushPending().catch(() => 0); // send check-ins saved while offline
     setSaved((await loadPending()).length);
   }), []);
@@ -307,6 +321,7 @@ function HomeScreen(props: P & { tab: Tab }) {
         <View style={{ flex: 1, marginRight: 4 }}><Big kind="secondary" label={`↻ ${t.refresh}`} busy={busy} onPress={load} /></View>
         <View style={{ flex: 1, marginLeft: 4 }}><Big testID="me" kind="secondary" label={`👤 ${t.me}`} onPress={() => go({ name: 'me' })} /></View>
       </View>
+      {offlineSince && <Banner text={`📶 ${t.offline} (${istDay(offlineSince, lang)} ${istTime(offlineSince, lang)})`} />}
       {offered.length > 0 && tab !== 'offers' && <Banner kind="ok" text={`🔔 ${t.offerTitle}`} />}
       {saved > 0 && <Big kind="secondary" label={`📶 ${t.sendSaved} (${saved})`} busy={busy} onPress={load} />}
       <PendingConfirmations {...props} />
@@ -374,6 +389,7 @@ function ShiftScreen({ t, lang, go, setError, id }: P & { id: string }) {
   };
   return (
     <Screen onBack={() => go({ name: 'home', tab: 'shifts' })} backLabel={t.back} title={s.title}>
+      <Speak lang={lang} label={t.listen} text={`${s.title}. ${t.total} ${Math.round(s.pay.takeHomePaise / 100)} ₹. ${t.when}: ${istDay(s.startsAt, lang)}, ${istTime(s.startsAt, lang)} – ${istTime(s.endsAt, lang)}. ${t.where}: ${s.siteName}. ${s.dressCode ? `${t.dress}: ${s.dressCode}.` : ''}`} />
       <Card>
         <PayLine s={s} t={t} />
         {s.pay.takeHomePaise > s.pay.totalPaise && <T muted>{t.total}: {rupees(s.pay.totalPaise)} + {rupees(s.pay.takeHomePaise - s.pay.totalPaise)}</T>}

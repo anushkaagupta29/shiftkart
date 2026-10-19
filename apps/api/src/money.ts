@@ -16,6 +16,7 @@ import type { SmsSender } from './adapters/sms';
 import { recordStrike } from './trust';
 import { velocityCheck } from './fraud-rules';
 import { caseEvent, openCase } from './cases';
+import { notify } from './notify/notify';
 
 const PROVIDER = 'mockpay';
 // Placeholder seller details until the company is registered (LEGAL L-32, L-12).
@@ -238,19 +239,13 @@ export async function processPayouts(db: Db, provider: PayoutProvider, dataKey: 
         await createPayslip(tx, u.rows[0], method.display);
       });
       paid += 1;
-      if (sms) {
-        const u = (await db.query('SELECT phone_enc FROM users WHERE id = $1', [p.worker_id])).rows[0];
-        await sms.send(decrypt(u.phone_enc, dataKey), `ShiftKart: ₹${(Number(p.amount_paise) / 100).toFixed(2)} sent to ${method.display}. See your payslip in the app.`);
-      }
+      await notify(db, { dataKey }, { userId: p.worker_id, template: 'payout_sent', vars: { paise: Number(p.amount_paise), to: method.display }, dedupeKey: `paid:${p.id}` });
     } else if (res.retryable && p.attempt_count < pol['payout.max_attempts']) {
       await db.query(`UPDATE payouts SET status = 'queued', last_error = $2, next_attempt_at = now() + make_interval(mins => $3) WHERE id = $1`, [p.id, res.reason, 2 ** p.attempt_count]);
     } else {
       await db.query(`UPDATE payouts SET status = 'held', held_reason = $2, last_error = $2 WHERE id = $1`, [p.id, res.retryable ? 'retries_exhausted' : res.reason]);
       await raiseFlag(db, 'worker', p.worker_id, 'payout_failed', { payoutId: p.id, reason: res.reason }, 30);
-      if (sms) {
-        const u = (await db.query('SELECT phone_enc FROM users WHERE id = $1', [p.worker_id])).rows[0];
-        await sms.send(decrypt(u.phone_enc, dataKey), 'ShiftKart: we could not send your pay to your account. Please check your UPI/bank details in the app.');
-      }
+      await notify(db, { dataKey }, { userId: p.worker_id, template: 'payout_held', dedupeKey: `held:${p.id}:${p.attempt_count}` });
     }
   }
   return paid;

@@ -8,6 +8,7 @@ import { raiseFlag } from './fraud';
 import { getPolicies } from './policy';
 import { badRequest, conflict, notFound } from './lib/errors';
 import { mismatchCheck } from './fraud-rules';
+import { notify } from './notify/notify';
 import type { Party } from './community';
 import type { SmsSender } from './adapters/sms';
 
@@ -136,8 +137,9 @@ export async function raiseSos(db: Db, workerId: string, input: { bookingId?: st
     await raiseFlag(tx, 'system', `sos:${s.id}`, 'sos_open', { workerId, bookingId: input.bookingId ?? null }, 100);
     await writeAudit(tx, { actorType: 'user', actorId: workerId, action: 'safety.sos', targetType: 'sos', targetId: s.id });
     if (token) {
-      await n.sms.send(decrypt(w.trusted_contact_phone_enc, n.dataKey),
-        `ShiftKart: ${w.first_name ?? 'Your contact'} pressed the SOS button. Live location for ${pol['sos.share_hours']} hours: ${n.publicBaseUrl}/safety/share/${token}. Our safety team has been alerted.`);
+      const lang = (await tx.query('SELECT preferred_lang FROM users WHERE id = $1', [workerId])).rows[0].preferred_lang;
+      await notify(tx, { dataKey: n.dataKey }, { toPhone: decrypt(w.trusted_contact_phone_enc, n.dataKey), lang, template: 'sos_trusted_contact',
+        vars: { name: w.first_name ?? 'Your contact', hours: pol['sos.share_hours'], link: `${n.publicBaseUrl}/safety/share/${token}` }, dedupeKey: `sos:${s.id}` });
     }
     return { id: s.id as string, sharedWithContact: Boolean(token), message: 'Help is on the way. Our safety team has been alerted. If you are in danger, call 112.' };
   });

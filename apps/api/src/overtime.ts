@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { applyBasisPoints, decrypt } from '@shiftkart/shared';
+import { applyBasisPoints } from '@shiftkart/shared';
 import type { Db } from './db';
 import { withTx } from './db';
 import { writeAudit } from './audit';
@@ -7,6 +7,7 @@ import { getPolicies } from './policy';
 import { badRequest, conflict, notFound } from './lib/errors';
 import { newProviderRef } from './adapters/mockpay';
 import type { SmsSender } from './adapters/sms';
+import { notify } from './notify/notify';
 
 /**
  * Overtime must be agreed in the app (SPEC §6.7): the business asks and pays the extra into escrow
@@ -56,9 +57,9 @@ export async function overtimeFunded(tx: import('./db').Tx, overtimeRequestId: s
   const ot = (await tx.query(
     `UPDATE overtime_requests SET status = 'awaiting_worker' WHERE id = $1 AND status = 'awaiting_funding' RETURNING *`, [overtimeRequestId],
   )).rows[0];
-  if (ot && sms && dataKey) {
-    const u = (await tx.query('SELECT u.phone_enc FROM bookings b JOIN users u ON u.id = b.worker_id WHERE b.id = $1', [ot.booking_id])).rows[0];
-    await sms.send(decrypt(u.phone_enc, dataKey), `ShiftKart: overtime offered, ${ot.extra_minutes} min for ₹${(Number(ot.worker_pay_paise) / 100).toFixed(2)}. Accept or decline in the app.`);
+  if (ot && dataKey) {
+    const b = (await tx.query('SELECT worker_id FROM bookings WHERE id = $1', [ot.booking_id])).rows[0];
+    await notify(tx, { dataKey }, { userId: b.worker_id, template: 'overtime_offer', vars: { minutes: ot.extra_minutes, paise: Number(ot.worker_pay_paise) }, dedupeKey: `ot:${ot.id}` });
   }
   return ot;
 }

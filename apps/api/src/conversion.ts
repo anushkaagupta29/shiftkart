@@ -13,6 +13,7 @@ import { SELLER } from './money';
 import { financialYear, gstSplit } from './domain/gst';
 import type { Tx } from './db';
 import type { SmsSender } from './adapters/sms';
+import { notify } from './notify/notify';
 
 export async function offerHire(db: Db, biz: { businessId: string; userId: string }, input: { bookingId: string; roleTitle: string; monthlySalaryPaise?: number; message?: string }, n: { sms: SmsSender; dataKey: string }) {
   return withTx(db, async (tx) => {
@@ -30,8 +31,7 @@ export async function offerHire(db: Db, biz: { businessId: string; userId: strin
       if ((e as { code?: string }).code === '23505') throw conflict('already_offered', 'You already have an open offer to this person.');
       throw e;
     }
-    const u = (await tx.query('SELECT phone_enc FROM users WHERE id = $1', [b.worker_id])).rows[0];
-    await n.sms.send(decrypt(u.phone_enc, n.dataKey), `ShiftKart: a business you worked for is offering you a full-time job (${input.roleTitle}). See it in the app. You never pay anything, and you can say no.`);
+    await notify(tx, { dataKey: n.dataKey }, { userId: b.worker_id, template: 'hire_offer', vars: { role: input.roleTitle }, dedupeKey: `hire:${h.id}` });
     await writeAudit(tx, { actorType: 'user', actorId: biz.userId, action: 'hire.offer', targetType: 'user', targetId: b.worker_id, after: { roleTitle: input.roleTitle } });
     return { id: h.id as string, status: h.status as string, feePaise: Number(h.fee_paise), gstPaise: Number(h.gst_paise) };
   });

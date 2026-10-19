@@ -1,7 +1,7 @@
-import { decrypt } from '@shiftkart/shared';
 import type { Db, Tx } from './db';
 import { withTx } from './db';
 import type { SmsSender } from './adapters/sms';
+import { notify } from './notify/notify';
 import { getPolicies, getPolicy } from './policy';
 import { HttpError, conflict, forbidden } from './lib/errors';
 import { assertNotOnHold } from './trust';
@@ -125,7 +125,7 @@ export async function offerNextOrRelease(tx: Tx, shiftId: string, sms?: SmsSende
   const shift = (await tx.query('SELECT * FROM shifts WHERE id = $1', [shiftId])).rows[0] as ShiftRow;
   if (shift.status === 'live' && shift.starts_at.getTime() - Date.now() > 60_000) {
     const next = (await tx.query(
-      `SELECT w.id, u.phone_enc FROM waitlist_entries w JOIN users u ON u.id = w.worker_id
+      `SELECT w.id, w.worker_id, u.phone_enc FROM waitlist_entries w JOIN users u ON u.id = w.worker_id
         WHERE w.shift_id = $1 AND w.status = 'waiting' ORDER BY w.position LIMIT 1 FOR UPDATE OF w SKIP LOCKED`,
       [shiftId],
     )).rows[0];
@@ -135,8 +135,9 @@ export async function offerNextOrRelease(tx: Tx, shiftId: string, sms?: SmsSende
         `UPDATE waitlist_entries SET status = 'offered', offered_at = now(), offer_expires_at = now() + make_interval(mins => $2) WHERE id = $1`,
         [next.id, ttl],
       );
-      if (sms && dataKey) {
-        await sms.send(decrypt(next.phone_enc, dataKey), `ShiftKart: a slot opened on a shift you waited for. Accept within ${ttl} min in the app.`);
+      if (dataKey) {
+        const title = (await tx.query('SELECT title FROM shifts WHERE id = $1', [shiftId])).rows[0].title;
+        await notify(tx, { dataKey }, { userId: next.worker_id, template: 'waitlist_offer', vars: { title, minutes: ttl }, dedupeKey: `offer:${next.id}:${Date.now()}` });
       }
       return 'offered';
     }

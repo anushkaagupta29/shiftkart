@@ -56,8 +56,9 @@ export function computeShiftCost(i: CostInput): ShiftCost {
   const perWorkerAllowances = i.mealAllowancePaise + i.travelAllowancePaise;
   const workerPayTotal = perWorkerPay * i.headcount;
   const allowancesTotal = perWorkerAllowances * i.headcount;
-  const fee = applyBasisPoints(workerPayTotal, i.feeBp);
-  const gst = applyBasisPoints(fee, i.gstBp);
+  // Rounded per worker, then multiplied, so each worker's release can never exceed what was funded for them.
+  const fee = applyBasisPoints(perWorkerPay, i.feeBp) * i.headcount;
+  const gst = applyBasisPoints(applyBasisPoints(perWorkerPay, i.feeBp), i.gstBp) * i.headcount;
   return {
     paidMinutes: minutes,
     perWorkerPayPaise: perWorkerPay,

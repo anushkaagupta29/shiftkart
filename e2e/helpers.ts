@@ -51,8 +51,8 @@ export async function otpLogin(phone: string, kind: 'worker' | 'business') {
 }
 
 /** A verified business with a live, funded shift near Whitefield. Built through the API. */
-export async function liveShiftViaApi(title: string) {
-  const token = await otpLogin(randomPhone(), 'business');
+export async function liveShiftViaApi(title: string, ownerPhone = randomPhone()) {
+  const token = await otpLogin(ownerPhone, 'business');
   const legalName = `E2E Logistics ${randomBytes(3).toString('hex')} Pvt Ltd`;
   const biz = await call('/businesses', { method: 'POST', token, body: JSON.stringify({ legalName }) });
   await call(`/businesses/${biz.id}/sites`, { method: 'POST', token, body: JSON.stringify({ name: 'E2E Dock', address: 'Dock 3, Whitefield Industrial Area, Bengaluru', cityCode: 'BLR', lat: 12.979, lng: 77.731 }) });
@@ -66,9 +66,29 @@ export async function liveShiftViaApi(title: string) {
   const sites = await call(`/businesses/${biz.id}/sites`, { token });
   const shift = await call(`/businesses/${biz.id}/shifts`, {
     method: 'POST', token,
-    body: JSON.stringify({ siteId: sites[0].id, roleCode: 'warehouse_packing', title, startsAt: ist(10), endsAt: ist(16), headcount: 2, payType: 'hourly', payPaise: 11000, breakMinutes: 0 }),
+    body: JSON.stringify({ siteId: sites[0].id, roleCode: 'warehouse_packing', title, startsAt: ist(10), endsAt: ist(16), headcount: 2, payType: 'hourly', payPaise: 11000, breakMinutes: 0, mealAllowancePaise: 5000 }),
   });
   const f = await call(`/businesses/${biz.id}/shifts/${shift.id}/fund`, { method: 'POST', token, headers: { 'idempotency-key': `e2e-${randomUUID()}` } });
   await call(`/mockpay/checkout/${f.intentId}`, { method: 'POST', body: JSON.stringify({ outcome: 'success' }) });
-  return { businessId: biz.id as string, shiftId: shift.id as string, token };
+  return { businessId: biz.id as string, shiftId: shift.id as string, token, ownerPhone };
 }
+
+/** A fully onboarded worker (mock KYC, selfie, UPI, profile), built through the API. */
+export async function workerViaApi() {
+  const phone = randomPhone();
+  await call('/auth/otp/request', { method: 'POST', body: JSON.stringify({ phone }) });
+  const out = await call('/dev/outbox', { method: 'POST', body: JSON.stringify({ phone }) });
+  const code = out[0].body.match(/\d{6}/)[0];
+  const t = await call('/auth/otp/verify', { method: 'POST', body: JSON.stringify({ phone, code, deviceId: `e2e-${randomUUID()}`, platform: 'web', signup: { kind: 'worker', lang: 'hi', consents: ['account', 'location_at_shift', 'face_verification'] } }) });
+  const token = t.accessToken as string;
+  const k = await call('/worker/kyc/start', { method: 'POST', token });
+  const personId = `e2e-${randomUUID()}`;
+  await call(`/mock/digilocker/${k.sessionId}/approve`, { method: 'POST', body: JSON.stringify({ personId, name: 'Sunita Rao', dob: '1994-08-15' }) });
+  await call('/worker/kyc/complete', { method: 'POST', token, body: JSON.stringify({ sessionId: k.sessionId }) });
+  await call('/worker/selfie', { method: 'POST', token, body: JSON.stringify({ mockPersonId: personId }) });
+  await call('/worker/payout-method', { method: 'POST', token, body: JSON.stringify({ type: 'upi', vpa: `sunita${Date.now()}@okaxis` }) });
+  await call('/worker/profile', { method: 'PUT', token, body: JSON.stringify({ languages: ['hi'], skills: ['packing'], travelRadiusKm: 30, hasTwoWheeler: false, homeCity: 'BLR' }) });
+  return { phone, token, refreshToken: t.refreshToken as string, personId };
+}
+
+export const api = call;

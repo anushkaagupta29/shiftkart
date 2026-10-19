@@ -23,17 +23,21 @@ Actors: 🏢 business · 👷 worker · 🧑‍💼 our staff · 🌐 outsider �
 | PAY-05 Wrong wage category | ✅ Phase 2 | `unit/shift-cost.test.ts`, `abuse/BIZ.test.ts` |
 | PAY-10 Funding never arrives | ✅ Phase 2 | `abuse/SYS-04.test.ts` |
 | WRK-01 Multiple accounts | ✅ Phase 2 (identity, face, bank/UPI, device) | `abuse/WRK-01.test.ts` |
-| WRK-02 Proxy worker | ◐ Phase 2: selfie must match the ID at onboarding. Check-in selfies in Phase 3. | `abuse/WRK-01.test.ts` |
+| WRK-02 Proxy worker | ✅ Phase 2 + 3 (selfie matches ID at onboarding, and at every check-in/out with liveness) | `abuse/WRK-01.test.ts`, `abuse/ATTENDANCE.test.ts` |
+| WRK-03 Buddy punching | ✅ Phase 3 | `abuse/ATTENDANCE.test.ts` |
+| WRK-04 GPS spoofing | ✅ Phase 3 (flagged, shown to supervisor, sent to review; not silently blocked) | `abuse/ATTENDANCE.test.ts` |
+| WRK-05 Screenshotted QR | ✅ Phase 3 (30 s codes, ±1 step, bound to shift; geofence + selfie still required) | `unit/phase3.test.ts`, `abuse/ATTENDANCE.test.ts` |
+| WRK-12 Check in and leave | ✅ Phase 3 (location pings with consent; 20+ min away → flag; business can dispute minutes) | `abuse/ATTENDANCE.test.ts` |
 | WRK-06 Underage | ✅ Phase 2 | `abuse/WRK-01.test.ts` |
 | WRK-07 Re-registering | ✅ Phase 2 | `abuse/WRK-01.test.ts` |
 | WRK-08 Slot hoarding | ✅ Phase 2 | `abuse/SYS-02.test.ts` |
-| WRK-09 Bots | ◐ Phase 2: per-worker accept rate limit. Device integrity token in Phase 3. | `abuse/SYS-09.test.ts` |
+| WRK-09 Bots | ◐ Phase 2 + 3: per-worker accept rate limit; device integrity verdict checked at check-in (mock). Integrity on accept with the real Play Integrity API at go-live. | `abuse/SYS-09.test.ts`, `abuse/ATTENDANCE.test.ts` |
 | OFF-02 Middleman takes a cut | ✅ Phase 2 (payout must be in the worker's own name, not shared) | `abuse/WRK-01.test.ts` |
-| MON-04 Payout redirected after takeover | ✅ Phase 2 | `abuse/WRK-01.test.ts` |
+| MON-04 Payout redirected after takeover | ✅ Phase 2 + 3 (pay waits out the 24 h cooldown) | `abuse/WRK-01.test.ts`, `abuse/MONEY.test.ts` |
 | MSG-01 Scraping / IDOR | ✅ Phase 1 + 2 (no worker directory; roster minimal) | `abuse/MSG-01.test.ts` |
 | MSG-05 OWASP basics | ✅ Phase 1 + 2 (route × role matrix covers all new routes) | `security/owasp.test.ts`, `security/rbac-matrix.test.ts` |
 | MSG-06 PII in logs | ✅ Phase 1 | `abuse/MSG-06.test.ts` |
-| INT-01 Silent edits | ◐ audit log, policy, ledger append-only and balanced. Timesheets in Phase 3. | `abuse/INT-01.test.ts`, `abuse/SYS-04.test.ts` |
+| INT-01 Silent edits | ✅ audit log, policy, ledger, attendance and payslips append-only; timesheet amounts frozen by trigger; no edit routes | `abuse/INT-01.test.ts`, `abuse/SYS-04.test.ts`, `abuse/MONEY.test.ts`, `abuse/ATTENDANCE.test.ts` |
 | INT-02 Masked personal data | ✅ Phase 1 + 2 (phones, payout details finance-only and masked) | `abuse/INT-02.test.ts`, `abuse/INT-06.test.ts` |
 | INT-04 Ops colluding | ◐ Phase 2: high-risk businesses need two different verifiers. Sampling and reviewer stats in Phase 4. | `abuse/BIZ.test.ts` |
 | INT-05 Bulk export | ◐ page caps, instant offboarding. Read-volume alerts in Phase 4. | `abuse/INT-05.test.ts` |
@@ -42,10 +46,21 @@ Actors: 🏢 business · 👷 worker · 🧑‍💼 our staff · 🌐 outsider �
 | SYS-01 Double-booking the last slot | ✅ Phase 2 (200 concurrent → exactly 1; 200 → exactly 30) | `abuse/SYS-01.test.ts` |
 | SYS-02 Overlaps / rest gap | ✅ Phase 2 | `abuse/SYS-02.test.ts` |
 | SYS-04 Webhook forgery / replay | ✅ Phase 2 | `abuse/SYS-04.test.ts` |
-| SYS-06 Ledger mismatch | ◐ every journal must balance (DB-enforced). Daily reconciliation in Phase 3. | `abuse/SYS-04.test.ts` |
+| SYS-06 Ledger mismatch | ✅ Phase 3 (balanced journals + daily reconciliation against the provider) | `abuse/SYS-04.test.ts`, `abuse/MONEY.test.ts`, `integration/phase3-journey.test.ts` |
 | SYS-07 Midnight / timezone | ✅ Phase 2 | `abuse/SYS-02.test.ts` |
 | SYS-09 Waitlist offer race | ✅ Phase 2 | `abuse/SYS-09.test.ts` |
-| End-to-end journeys | ✅ Phase 2: business (signup → verification → ops approval → post → fund → live) and worker (Hindi signup → onboarding → accept) | `e2e/business.spec.ts`, `e2e/worker.spec.ts` (repo root) |
+| PAY-01 Disputing everything | ✅ Phase 3 (only disputed minutes held; rest + allowances paid at once; frequent disputers flagged; big awards need a second officer) | `abuse/MONEY.test.ts` |
+| PAY-02 Ignoring timesheets | ✅ Phase 3 (auto-approve after 12 h) | `abuse/MONEY.test.ts` |
+| PAY-06 Unpaid extra time | ✅ Phase 3 (paid time = scheduled window; staying late without agreed overtime flagged) | `abuse/ATTENDANCE.test.ts`, `unit/phase3.test.ts` |
+| PAY-07 Unfunded overtime | ✅ Phase 3 (worker can't accept until the business has paid; paid at 2×) | `abuse/MONEY.test.ts` |
+| PAY-09 Chargeback after payout | ✅ Phase 3 (workers keep pay; business suspended; loss booked) | `abuse/MONEY.test.ts` |
+| PAY-12 Supervisor ghost workers | ✅ Phase 3 (hand-marked attendance unpaid until the worker confirms with a selfie; worker can reject; high manual ratio flagged) | `abuse/ATTENDANCE.test.ts` |
+| MON-02 Laundering | ◐ Phase 3: payout caps, refunds only to the original payment, KYC both sides. Velocity rules in Phase 4. | `abuse/MONEY.test.ts` |
+| INT-03 Manual payouts to self | ✅ Phase 3 (two finance officers, verified account only, daily limit) | `abuse/MONEY.test.ts` |
+| SYS-03 Double payout | ✅ Phase 3 (parallel runners and crash-after-transfer both pay once) | `abuse/MONEY.test.ts` |
+| SYS-05 Payout vs refund race | ✅ Phase 3 (settlement waits for final timesheets; escrow can't go negative) | `abuse/MONEY.test.ts` |
+| SYS-08 Offline clock tampering | ✅ Phase 3 (time taken from the gate code; drift flagged; >24 h refused) | `abuse/ATTENDANCE.test.ts` |
+| End-to-end journeys | ✅ business (signup → verification → ops approval → post → fund → live); worker (Hindi signup → onboarding → accept); shift day (gate code → check-in/out → approve → paid → payslip) | `e2e/*.spec.ts` (repo root) |
 | All others | ⏳ Planned for the phase listed on each case | — |
 
 ---|---|---|

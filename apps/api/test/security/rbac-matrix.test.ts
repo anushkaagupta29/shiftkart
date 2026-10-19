@@ -38,7 +38,9 @@ describe('route inventory', () => {
       'POST /auth/otp/request',
       'POST /auth/otp/verify',
       'POST /auth/refresh',
+      'POST /dev/jobs/run', // dev only
       'POST /dev/outbox', // dev only
+      'POST /dev/shifts/:shiftId/start-now', // dev only (time travel for local testing)
       'POST /mock/digilocker/:sessionId/approve', // dev only
       'POST /mockpay/checkout/:intentId', // dev only
       'POST /webhooks/mockpay', // authenticated by HMAC signature instead

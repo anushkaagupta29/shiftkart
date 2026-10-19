@@ -82,12 +82,17 @@ export async function adminRoutes(app: FastifyInstance, { db, config }: AppDeps)
              (SELECT count(*) FROM shifts WHERE status = 'live' AND starts_at > now()) AS shifts_live,
              (SELECT count(*) FROM fraud_flags WHERE status = 'open') AS open_flags,
              (SELECT count(*) FROM worker_profiles WHERE verification_status = 'verified') AS verified_workers,
-             (SELECT count(*) FROM sites WHERE status = 'pending_verify' AND business_id IN (SELECT id FROM businesses WHERE verification_status = 'verified')) AS sites_review`);
+             (SELECT count(*) FROM sites WHERE status = 'pending_verify' AND business_id IN (SELECT id FROM businesses WHERE verification_status = 'verified')) AS sites_review,
+             (SELECT count(*) FROM payouts WHERE status NOT IN ('paid', 'rejected', 'pending_approval', 'reversed') AND approved_at < now() - interval '24 hours') AS payouts_overdue,
+             (SELECT count(*) FROM payouts WHERE status IN ('held', 'failed')) AS payouts_held,
+             (SELECT count(*) FROM timesheets WHERE status IN ('disputed', 'partially_disputed')) AS disputes_open,
+             (SELECT count(*) FROM reconciliation_runs WHERE status = 'mismatch' AND created_at > now() - interval '7 days') AS recon_mismatch`);
     const c = r.rows[0];
     return {
       workers: c.workers, verifiedWorkers: c.verified_workers, businessUsers: c.business_users, businesses: c.businesses,
       businessesPendingVerification: c.businesses_pending, suspendedUsers: c.suspended_users,
       shiftsPendingReview: c.shifts_review, liveShifts: c.shifts_live, openFraudFlags: c.open_flags, sitesPendingReview: c.sites_review,
+      payoutsOverdue: c.payouts_overdue, payoutsHeld: c.payouts_held, disputesOpen: c.disputes_open, reconciliationMismatches: c.recon_mismatch,
     };
   });
 

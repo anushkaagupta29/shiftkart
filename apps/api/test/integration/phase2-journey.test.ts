@@ -3,7 +3,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { closeApp, makeApp, resetData, type Ctx } from '../helpers';
 import { fund, postShift, seedRates, verifiedBusiness, verifiedWorker } from '../fixtures';
-import { accountBalance, escrowAccount } from '../../src/ledger';
+import { accountBalance, shiftEscrow } from '../../src/ledger';
 
 let ctx: Ctx;
 beforeAll(async () => { ctx = await makeApp(); await resetData(ctx.db); await seedRates(ctx); });
@@ -28,7 +28,7 @@ describe('Phase 2 journey', () => {
 
     const { webhook } = await fund(ctx, b, shift.id);
     expect(webhook.result.outcome).toBe('captured');
-    expect(await accountBalance(ctx.db, escrowAccount(b.businessId))).toBe(466375);
+    expect(await accountBalance(ctx.db, shiftEscrow(shift.id))).toBe(466375);
 
     feed = (await ctx.app.inject({ method: 'POST', url: '/worker/shifts/search', headers: w.auth, payload: {} })).json();
     const seen = feed.items.find((s: { id: string }) => s.id === shift.id);

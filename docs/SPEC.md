@@ -214,7 +214,7 @@ Status becomes `verified` and the worker can accept shifts. Browsing is allowed 
    - All pass → `checked_in`.
    - Soft failures (GPS accuracy, integrity, mock location) → check-in recorded with flags → fraud review queue and a supervisor prompt to confirm visually.
    - Hard failures (wrong QR, face mismatch) → rejected, with retry and supervisor fallback.
-5. **Breaks:** the worker taps start and end, and the supervisor can record them. Unpaid break minutes are capped at the shift's posted break.
+5. **Breaks:** the worker taps start and end, and the supervisor can record them. The posted unpaid break is deducted in proportion to time worked; longer recorded breaks are capped at the posted break (DECISIONS D-049).
 6. **Check-out** uses the same checks. Leaving the geofence for more than 20 minutes `[CONFIG]` without a break creates a flag, not an automatic deduction.
 7. **Offline fallback:**
    - The supervisor app caches the roster and the site secret-derived key, and generates QR codes offline.
@@ -316,7 +316,7 @@ Status becomes `verified` and the worker can accept shifts. Browsing is allowed 
 |---|---|---|
 | **1 Foundation** ✅ | Monorepo, docker-compose, schema + migrations + seed, OTP auth (mock SMS), sessions, RBAC middleware, audit log, admin login + skeleton, README | `npm run setup && npm run dev` runs everything; RBAC + audit + OTP rate-limit tests pass |
 | **2 Supply & demand** ✅ | Business onboarding + verification queue, sites/geofence, rate table, shift posting with min-wage + cost preview, funding (mock escrow + webhooks), worker onboarding (mock KYC, liveness, penny drop), feed, accept with booking rules, waitlist | Concurrency test (200 → 1) passes; you can post → fund → accept in the browser |
-| **3 The shift** | Rotating QR, check-in/out with geofence + selfie + integrity (mock), breaks, offline fallback, timesheets, approval/auto-approval/partial dispute, payouts (mock), payslips, invoices, ledger + reconciliation | Full journey E2E; double-payout and webhook replay tests pass |
+| **3 The shift** ✅ | Rotating QR, check-in/out with geofence + selfie + integrity (mock), breaks, offline fallback, timesheets, approval/auto-approval/partial dispute, payouts (mock), payslips, invoices, ledger + reconciliation | Full journey E2E; double-payout and webhook replay tests pass |
 | **4 Trust layer** | Cancellations + compensation, strikes + appeals, ratings, disputes, chat + filters, masking, SOS, incidents, site pause, fraud rules, admin queues | Every abuse test passes |
 | **5 Real users** | Hindi + Kannada, voice prompts, low-bandwidth/offline polish, notifications (SMS/WhatsApp mock → sandbox), dashboards | Worker app usable in Hindi end to end on a throttled network |
 | **6 Go-live readiness** | Security review, k6 load test, breach plan, legal checklist review with you, sandbox→live switch plan | Owner sign-off; live switch only with explicit permission |

@@ -144,3 +144,63 @@ export async function bulkVerifiedWorkers(ctx: Ctx, n: number): Promise<{ userId
 }
 
 
+
+// ------------------------------------------------------------------ Phase 3
+
+import { siteSecret } from '../src/attendance';
+import { gateCode, qrStep, shiftKey } from '../src/domain/qr';
+import { runJobsOnce } from '../src/jobs';
+import { MockPayouts } from '../src/adapters/payouts';
+import { MockSms } from '../src/adapters/sms';
+
+/** Moves a live shift so it started `minutesAgo` minutes ago (keeps its length). */
+export async function startShiftAgo(ctx: Ctx, shiftId: string, minutesAgo = 5) {
+  const r = await ctx.app.inject({ method: 'POST', url: `/dev/shifts/${shiftId}/start-now`, payload: { minutes: -minutesAgo } });
+  if (r.statusCode !== 200) throw new Error(`start-now failed ${r.body}`);
+  return r.json() as { startsAt: string; endsAt: string };
+}
+
+export async function currentCode(ctx: Ctx, shiftId: string, atMs = Date.now()) {
+  const s = (await ctx.db.query('SELECT site_id FROM shifts WHERE id = $1', [shiftId])).rows[0];
+  return gateCode(shiftKey(await siteSecret(ctx.db, s.site_id, ctx.config.dataKey), shiftId), qrStep(atMs));
+}
+
+export const clockBody = (w: Worker, code: string, over: Record<string, unknown> = {}) => ({
+  code, lat: WHITEFIELD.lat, lng: WHITEFIELD.lng, accuracyM: 20, mockLocation: false, integrityToken: 'mock:pass',
+  selfie: { mockPersonId: w.personId }, ...over,
+});
+
+/** A verified worker booked on a live shift that has just started. */
+export async function onShift(ctx: Ctx, b: Biz, over: Record<string, unknown> = {}, w?: Worker) {
+  const shift = await liveShift(ctx, b, over);
+  const worker = w ?? (await verifiedWorker(ctx));
+  const acc = await ctx.app.inject({ method: 'POST', url: `/worker/shifts/${shift.id}/accept`, headers: worker.auth });
+  if (acc.statusCode !== 201) throw new Error(`accept failed ${acc.body}`);
+  await startShiftAgo(ctx, shift.id, 5);
+  return { shift, worker, bookingId: acc.json().bookingId as string };
+}
+
+export async function clock(ctx: Ctx, w: Worker, bookingId: string, shiftId: string, type: 'check-in' | 'check-out', over: Record<string, unknown> = {}) {
+  return ctx.app.inject({ method: 'POST', url: `/worker/bookings/${bookingId}/${type}`, headers: w.auth, payload: clockBody(w, await currentCode(ctx, shiftId), over) });
+}
+
+/** Checked in, then checked out. Attendance times are backdated so the timesheet covers the whole shift. */
+export async function workedShift(ctx: Ctx, b: Biz, over: Record<string, unknown> = {}) {
+  const s = await onShift(ctx, b, over);
+  const ci = await clock(ctx, s.worker, s.bookingId, s.shift.id, 'check-in');
+  if (ci.statusCode !== 200) throw new Error(`check-in failed ${ci.body}`);
+  // Pretend the shift has run its course: move it into the past, keeping check-in at its start.
+  const len = (Date.parse(s.shift.endsAt) - Date.parse(s.shift.startsAt)) / 60_000;
+  await startShiftAgo(ctx, s.shift.id, len + 1);
+  const shiftRow = (await ctx.db.query('SELECT starts_at FROM shifts WHERE id = $1', [s.shift.id])).rows[0];
+  await ctx.db.query('ALTER TABLE attendance_events DISABLE TRIGGER attendance_events_append_only');
+  await ctx.db.query('UPDATE attendance_events SET effective_at = $2 WHERE booking_id = $1', [s.bookingId, shiftRow.starts_at]);
+  await ctx.db.query('ALTER TABLE attendance_events ENABLE TRIGGER attendance_events_append_only');
+  const co = await clock(ctx, s.worker, s.bookingId, s.shift.id, 'check-out');
+  if (co.statusCode !== 200) throw new Error(`check-out failed ${co.body}`);
+  return { ...s, timesheet: co.json().timesheet };
+}
+
+export async function runJobs(ctx: Ctx) {
+  return runJobsOnce({ db: ctx.db, sms: new MockSms(ctx.db, ctx.config.hashKey), payouts: new MockPayouts(ctx.db), dataKey: ctx.config.dataKey });
+}

@@ -18,7 +18,13 @@ function ShiftDetail() {
   const router = useRouter();
   const [s, setS] = useState<Detail | null>(null);
   const [err, setErr] = useState('');
-  const load = () => api<Detail>(`/businesses/${id}/shifts/${shiftId}`).then(setS).catch((e) => setErr(errText(e)));
+  const [money, setMoney] = useState<{ fundedPaise: number; releasedPaise: number; refundedPaise: number; heldPaise: number; settledAt: string | null } | null>(null);
+  const load = () => {
+    api<Detail>(`/businesses/${id}/shifts/${shiftId}`).then((d) => {
+      setS(d);
+      if (['live', 'completed'].includes(d.status)) api(`/businesses/${id}/shifts/${shiftId}/money`).then(setMoney).catch(() => {});
+    }).catch((e) => setErr(errText(e)));
+  };
   useEffect(() => { load(); const t = setInterval(load, 10_000); return () => clearInterval(t); }, [id, shiftId]);
 
   const fund = async () => {
@@ -53,11 +59,24 @@ function ShiftDetail() {
           <tr className="total"><td>Total</td><td>{rupees(s.cost.totalPaise)}</td></tr>
         </tbody></table>
         <p className="row">
+          {s.status === 'live' && <a href={`/b/${id}/shifts/${shiftId}/gate`}><button>Open gate screen (check-in code)</button></a>}
           {s.status === 'pending_funding' && <button onClick={fund}>Fund {rupees(s.totalPaise)}</button>}
           {['pending_funding', 'pending_review'].includes(s.status) && <button className="secondary" onClick={cancel}>Withdraw</button>}
         </p>
         {err && <p className="err">{err}</p>}
       </div>
+      {money && (
+        <div className="panel">
+          <h3 style={{ marginTop: 0 }}>Money</h3>
+          <table className="cost" style={{ maxWidth: 420 }}><tbody>
+            <tr><td>You funded</td><td>{rupees(money.fundedPaise)}</td></tr>
+            <tr><td>Paid out (wages, fee, GST)</td><td>{rupees(money.releasedPaise)}</td></tr>
+            <tr><td>Refunded to you</td><td>{rupees(money.refundedPaise)}</td></tr>
+            <tr className="total"><td>Still held</td><td>{rupees(money.heldPaise)}</td></tr>
+          </tbody></table>
+          {money.settledAt ? <p className="muted">Closed {ist(money.settledAt)}. See Invoices for the GST invoice.</p> : <p className="muted">Unused money is refunded when the shift closes.</p>}
+        </div>
+      )}
       <div className="panel">
         <h3 style={{ marginTop: 0 }}>Workers</h3>
         <table><thead><tr><th>Name</th><th>Status</th><th>Booked</th></tr></thead>

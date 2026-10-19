@@ -1,31 +1,12 @@
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useState } from 'react';
 import { Alert, Platform, View } from 'react-native';
-import { ApiError, api, clearSession, deviceId, istDay, istTime, loadSession, rupees, saveTokens } from './api';
+import { ApiError, api, clearSession, deviceId, flushPending, istDay, istTime, loadPending, loadSession, rupees, saveTokens } from './api';
 import { STRINGS, type Lang, type T as Strings } from './i18n';
+import { showError, useBusy, type Booking, type Me, type Offer, type P, type Ref, type Route, type Shift, type Tab } from './common';
+import { BookingScreen, EarningsTab, PayslipScreen, PendingConfirmations } from './ShiftDay';
 import { Banner, Big, Card, Chip, Field, Screen, T, useColors } from './ui';
 
-type Me = {
-  firstName: string | null; verificationStatus: string; kycRejectReason: string | null;
-  steps: { identity: string; selfie: string; payout: string; profile: string };
-  profile: { languages: string[]; skills: string[]; travelRadiusKm: number; hasTwoWheeler: boolean; homeCity: string | null };
-};
-type Shift = {
-  id: string; title: string; description: string; businessName: string; siteName: string; address: string; distanceKm?: number;
-  startsAt: string; endsAt: string; breakMinutes: number; slotsLeft: number; headcount: number; dressCode: string; bringItems: string;
-  pay: { type: string; hourlyPaise: number; totalPaise: number; mealAllowancePaise: number; travelAllowancePaise: number; takeHomePaise: number };
-  eligible: boolean; missing: string[]; myWaitlist: { id: string; status: string } | null;
-};
-type Booking = { bookingId: string; bookingStatus: string; shift: Shift };
-type Offer = { id: string; status: string; expiresAt: string | null; shiftId: string; title: string; startsAt: string };
-type Ref = { skills: { code: string; name: Record<string, string> }[]; cities: { code: string; name: string }[] };
-
-type Route =
-  | { name: 'lang' } | { name: 'phone' } | { name: 'code'; phone: string } | { name: 'consent'; phone: string; code: string }
-  | { name: 'setup' } | { name: 'digilocker'; sessionId: string } | { name: 'selfie' } | { name: 'payout' } | { name: 'profile' }
-  | { name: 'home'; tab: 'shifts' | 'mine' | 'offers' } | { name: 'shift'; id: string };
-
-const showError = (e: unknown) => (e instanceof ApiError ? e.message : 'Something went wrong.');
 const LANG_NAMES: Record<string, string> = { hi: 'हिंदी', en: 'English', kn: 'ಕನ್ನಡ', ta: 'தமிழ்', te: 'తెలుగు', mr: 'मराठी', bn: 'বাংলা', ur: 'اردو', ml: 'മലയാളം' };
 
 export default function App() {
@@ -67,19 +48,10 @@ export default function App() {
       {route.name === 'profile' && <ProfileScreen {...props} />}
       {route.name === 'home' && <HomeScreen {...props} tab={route.tab} />}
       {route.name === 'shift' && <ShiftScreen {...props} id={route.id} />}
+      {route.name === 'booking' && <BookingScreen {...props} bookingId={route.bookingId} shiftId={route.shiftId} />}
+      {route.name === 'payslip' && <PayslipScreen {...props} id={route.id} />}
     </View>
   );
-}
-
-type P = { t: Strings; lang: Lang; go: (r: Route) => void; setError: (s: string) => void; refreshMe: () => Promise<Me>; me: Me | null; afterLogin: () => Promise<void> };
-
-function useBusy(setError: (s: string) => void) {
-  const [busy, setBusy] = useState(false);
-  const run = async (fn: () => Promise<void>) => {
-    setBusy(true); setError('');
-    try { await fn(); } catch (e) { setError(showError(e)); } finally { setBusy(false); }
-  };
-  return { busy, run };
 }
 
 // ------------------------------------------------------------------ login
@@ -300,15 +272,19 @@ function PayLine({ s, t }: { s: Shift; t: Strings }) {
   );
 }
 
-function HomeScreen({ t, lang, go, setError, tab }: P & { tab: 'shifts' | 'mine' | 'offers' }) {
+function HomeScreen(props: P & { tab: Tab }) {
+  const { t, lang, go, setError, tab } = props;
   const [shifts, setShifts] = useState<Shift[] | null>(null);
   const [bookings, setBookings] = useState<Booking[] | null>(null);
   const [offers, setOffers] = useState<Offer[]>([]);
   const [radiusKm, setRadiusKm] = useState<number | null>(null);
+  const [saved, setSaved] = useState(0);
   const { busy, run } = useBusy(setError);
   const load = useCallback(() => run(async () => {
     const [f, b, o] = await Promise.all([api('/worker/shifts/search', { method: 'POST', body: {} }), api<Booking[]>('/worker/bookings'), api<Offer[]>('/worker/offers')]);
     setShifts(f.items); setBookings(b); setOffers(o); setRadiusKm(f.radiusKm);
+    await flushPending().catch(() => 0); // send check-ins saved while offline
+    setSaved((await loadPending()).length);
   }), []);
   useEffect(() => { load(); }, [load]);
   const offered = offers.filter((o) => o.status === 'offered');
@@ -316,14 +292,17 @@ function HomeScreen({ t, lang, go, setError, tab }: P & { tab: 'shifts' | 'mine'
   return (
     <Screen>
       <View style={{ flexDirection: 'row', marginBottom: 8 }}>
-        {(['shifts', 'mine', 'offers'] as const).map((k) => (
+        {(['shifts', 'mine', 'earnings', 'offers'] as const).map((k) => (
           <View key={k} style={{ flex: 1, marginHorizontal: 2 }}>
-            <Big testID={`tab-${k}`} kind={tab === k ? 'primary' : 'secondary'} label={`${k === 'shifts' ? t.shifts : k === 'mine' ? t.myShifts : t.offers}${k === 'offers' && offered.length ? ` (${offered.length})` : ''}`} onPress={() => go({ name: 'home', tab: k })} />
+            <Big testID={`tab-${k}`} kind={tab === k ? 'primary' : 'secondary'} label={`${{ shifts: t.shifts, mine: t.myShifts, earnings: t.earnings, offers: t.offers }[k]}${k === 'offers' && offered.length ? ` (${offered.length})` : ''}`} onPress={() => go({ name: 'home', tab: k })} />
           </View>
         ))}
       </View>
       <Big kind="secondary" label={`↻ ${t.refresh}`} busy={busy} onPress={load} />
       {offered.length > 0 && tab !== 'offers' && <Banner kind="ok" text={`🔔 ${t.offerTitle}`} />}
+      {saved > 0 && <Big kind="secondary" label={`📶 ${t.sendSaved} (${saved})`} busy={busy} onPress={load} />}
+      <PendingConfirmations {...props} />
+      {tab === 'earnings' && <EarningsTab {...props} />}
 
       {tab === 'shifts' && radiusKm != null && (
         <Big testID="change-area" kind="secondary" label={`📍 ${t.within} ${radiusKm} ${t.km} · ${t.change}`} onPress={() => go({ name: 'profile' })} />
@@ -339,7 +318,7 @@ function HomeScreen({ t, lang, go, setError, tab }: P & { tab: 'shifts' | 'mine'
       )))}
 
       {tab === 'mine' && bookings?.map((b) => (
-        <Card key={b.bookingId} onPress={() => go({ name: 'shift', id: b.shift.id })}>
+        <Card key={b.bookingId} testID={`booking-${b.bookingId}`} onPress={() => go(['confirmed', 'checked_in', 'completed'].includes(b.bookingStatus) ? { name: 'booking', bookingId: b.bookingId, shiftId: b.shift.id } : { name: 'shift', id: b.shift.id })}>
           <T size={19} bold>{b.shift.title}</T>
           <T>🗓 {istDay(b.shift.startsAt, lang)}  ⏰ {istTime(b.shift.startsAt, lang)}</T>
           <T muted>{b.bookingStatus === 'confirmed' ? `✓ ${t.booked}` : b.bookingStatus.startsWith('cancelled') ? t.cancelled : b.bookingStatus}</T>
@@ -401,6 +380,7 @@ function ShiftScreen({ t, lang, go, setError, id }: P & { id: string }) {
       {booking ? (
         <>
           <Banner kind="ok" text={`✓ ${t.booked}`} />
+          <Big testID="go-to-shift" label={t.goToShift} icon="📍" onPress={() => go({ name: 'booking', bookingId: booking.bookingId, shiftId: id })} />
           <Big kind="danger" label={t.cancel} busy={busy} onPress={cancel} />
         </>
       ) : !s.eligible ? (

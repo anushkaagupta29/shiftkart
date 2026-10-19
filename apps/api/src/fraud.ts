@@ -1,6 +1,6 @@
 import type { Queryable } from './db';
 
-export type FlagSubject = 'worker' | 'business' | 'shift' | 'device' | 'payout_method';
+export type FlagSubject = 'worker' | 'business' | 'shift' | 'device' | 'payout_method' | 'system';
 
 /** Opens a fraud flag for human review. One open flag per subject + rule (duplicates are merged). */
 export async function raiseFlag(db: Queryable, subjectType: FlagSubject, subjectId: string, ruleCode: string, evidence: Record<string, unknown> = {}, score = 50) {

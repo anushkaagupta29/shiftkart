@@ -24,11 +24,16 @@ import { MockKyc, type KycProvider } from './adapters/kyc';
 import { MockLiveness, type LivenessProvider } from './adapters/mock-face';
 import { MockBank, type BankVerifier } from './adapters/bank';
 import { MockGstn, type GstnProvider } from './adapters/gstn';
+import { MockIntegrity, MockPayouts, type IntegrityVerifier, type PayoutProvider } from './adapters/payouts';
+import { workerAttendanceRoutes } from './routes/worker-attendance';
+import { businessAttendanceRoutes } from './routes/business-attendance';
+import { adminFinanceRoutes } from './routes/admin-finance';
 import './auth/types';
 
 export type AppDeps = {
   db: Db; config: Config;
   sms: SmsSender; kyc: KycProvider; liveness: LivenessProvider; bank: BankVerifier; gstn: GstnProvider;
+  payouts: PayoutProvider; integrity: IntegrityVerifier;
 };
 
 export async function buildApp(config: Config, db: Db, opts: { sms?: SmsSender; logStream?: NodeJS.WritableStream } = {}): Promise<FastifyInstance> {
@@ -42,6 +47,7 @@ export async function buildApp(config: Config, db: Db, opts: { sms?: SmsSender; 
     db, config,
     sms: opts.sms ?? new MockSms(db, config.hashKey),
     kyc: new MockKyc(db), liveness: new MockLiveness(), bank: new MockBank(), gstn: new MockGstn(db),
+    payouts: new MockPayouts(db), integrity: new MockIntegrity(),
   };
 
   await app.register(helmet);
@@ -81,6 +87,9 @@ export async function buildApp(config: Config, db: Db, opts: { sms?: SmsSender; 
   await app.register(async (s) => workerRoutes(s, deps));
   await app.register(async (s) => workerShiftRoutes(s, deps));
   await app.register(async (s) => adminOpsRoutes(s, deps));
+  await app.register(async (s) => workerAttendanceRoutes(s, deps));
+  await app.register(async (s) => businessAttendanceRoutes(s, deps));
+  await app.register(async (s) => adminFinanceRoutes(s, deps));
   if (config.devEndpoints && config.env !== 'production') await app.register(async (s) => devRoutes(s, deps));
 
   return app;

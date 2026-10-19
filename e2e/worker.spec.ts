@@ -32,7 +32,7 @@ test('worker (Hindi, phone screen): sign up → DigiLocker → selfie → UPI �
   // Verified → feed. The funded shift is there with pay shown up front.
   const card = page.getByTestId(`shift-${shiftId}`);
   await expect(card).toBeVisible();
-  await expect(card).toContainText('₹660'); // 6 h × ₹110
+  await expect(card).toContainText('₹710'); // 6 h × ₹110 + ₹50 meal
   await card.click();
   await page.getByTestId('accept').click();
   await expect(page.getByText('शिफ्ट बुक हो गई!')).toBeVisible();

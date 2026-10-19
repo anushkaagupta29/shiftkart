@@ -30,6 +30,6 @@ export function verifyWebhookSignature(secret: string, rawBody: string, header: 
 
 export type MockpayEvent = {
   id: string;
-  type: 'payment.captured' | 'payment.failed';
+  type: 'payment.captured' | 'payment.failed' | 'payment.chargeback' | 'payout.reversed';
   data: { orderRef: string; amountPaise: number };
 };

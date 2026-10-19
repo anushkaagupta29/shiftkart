@@ -11,6 +11,7 @@ import { parse } from '../lib/validate';
 import { HttpError, badRequest, conflict, forbidden, notFound } from '../lib/errors';
 import { userActor } from '../auth/guard';
 import { recomputeWorkerVerification } from '../worker-status';
+import { releaseHeldForWorker } from '../money';
 import { cosineScore, fromPgVector, toPgVector } from '../adapters/mock-face';
 import { nameMatchScore } from '../adapters/bank';
 import { ageOn, istDate } from '../time';
@@ -224,6 +225,7 @@ export async function workerRoutes(app: FastifyInstance, { db, config, kyc, live
         return { error: badRequest('name_mismatch', 'The name on this account does not match your ID. Use an account in your own name.') };
       }
       if (status === 'review') await raiseFlag(tx, 'payout_method', m.id, 'payout_name_review', { score, worker: a.userId }, 40);
+      if (status === 'verified') await releaseHeldForWorker(tx, a.userId);
       return { id: m.id, status, display, cooldownUntil: m.cooldown_until, verificationStatus: await recomputeWorkerVerification(tx, a.userId) };
     });
     if ('error' in outcome) throw outcome.error;

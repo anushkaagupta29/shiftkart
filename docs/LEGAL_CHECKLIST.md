@@ -14,6 +14,8 @@ Nothing in this repo is legal advice or final legal text. Each item is something
 - ☐ **L-09** Prohibited and hazardous role list; minimum age above 18 for any role.
 - ☐ **L-10** Strike, suspension and appeal policy: fairness and grievance obligations.
 - ☐ **L-11** Full-time conversion fee: enforceability, and that it never binds the worker.
+- ☐ **L-35** Statutory records under the Code on Wages / OSH Code (muster roll, wage register, wage slips): whose duty in the marketplace model, and whether our attendance records, timesheets and payslips meet the required format and retention.
+- ☐ **L-36** Allowances paid in full for a partial day (D-051), the pro-rata unpaid break (D-049), and "no pay for early arrival / staying late without agreed overtime": confirm these rules are lawful.
 
 ## Tax
 - ☐ **L-12** GST on platform fee: rate, SAC code, place of supply (CGST/SGST vs IGST), invoice format and numbering.

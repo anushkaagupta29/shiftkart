@@ -81,3 +81,25 @@ export const istTime = (iso: string, lang: string) =>
   new Date(iso).toLocaleTimeString(lang === 'hi' ? 'hi-IN' : 'en-IN', { timeZone: 'Asia/Kolkata', hour: 'numeric', minute: '2-digit' });
 export const istDay = (iso: string, lang: string) =>
   new Date(iso).toLocaleDateString(lang === 'hi' ? 'hi-IN' : 'en-IN', { timeZone: 'Asia/Kolkata', weekday: 'short', day: 'numeric', month: 'short' });
+
+// Offline queue for check-in/out: if there's no network, the scan is saved with the time it happened
+// and sent later. The server trusts the gate code's time, not the phone's clock (SYS-08).
+export type PendingClock = { bookingId: string; kind: 'check-in' | 'check-out'; body: Record<string, unknown> };
+
+export async function loadPending(): Promise<PendingClock[]> {
+  try { return JSON.parse((await store.get('sk_pending')) ?? '[]'); } catch { return []; }
+}
+export async function savePending(list: PendingClock[]) {
+  await store.set('sk_pending', list.length ? JSON.stringify(list) : null);
+}
+export async function flushPending(): Promise<number> {
+  const list = await loadPending();
+  const left: PendingClock[] = [];
+  let sent = 0;
+  for (const p of list) {
+    try { await api(`/worker/bookings/${p.bookingId}/${p.kind}`, { method: 'POST', body: p.body }); sent += 1; }
+    catch (e) { if (e instanceof ApiError && e.code === 'offline') left.push(p); }
+  }
+  await savePending(left);
+  return sent;
+}

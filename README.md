@@ -1,7 +1,7 @@
 # ShiftKart
 
 Short-shift staffing for India: businesses post pre-funded shifts, verified workers pick them,
-check in on site, and get paid within a day. **Status: Phase 2 (supply and demand) done.** Everything runs
+check in on site, and get paid within a day. **Status: Phase 3 (the shift itself) done.** Everything runs
 on your laptop. Nothing talks to a real SMS, payment, bank or KYC service: those are all mocks.
 
 - Product spec: [docs/SPEC.md](docs/SPEC.md)
@@ -95,10 +95,30 @@ npm run totp -- safety@shiftkart.local
 - **Profile**: pick at least one skill. Set distance to **20 km** or more (Whitefield is about 15 km from the city centre).
 - The funded shift appears with full pay, time and place. Accept it. It shows up on the business's shift page with your first name.
 
-**3. Review as ops** (http://localhost:3001)
+**3. Work the shift** (check in, break, check out, get paid)
+
+Shifts are usually tomorrow, so there's a dev-only "time machine" that makes a test shift start now:
+
+```bash
+curl -s -X POST localhost:4000/dev/shifts/<shift-id>/start-now -H 'content-type: application/json' -d '{"minutes": -5}'
+```
+
+(The shift id is in the business app's address bar on the shift page.)
+- Business app → the shift → **Open gate screen**. It shows a QR and a 6-digit code that change every 30 seconds,
+  and keep working with no internet. On a real phone, put it on the supervisor's phone at the gate.
+- Worker app → **My shifts** → the shift. Tap **Test: I am at the site** (stands in for GPS), type the code, **Check in**.
+  Try a wrong code, an old code, or the "fake-GPS" and "failed security check" test toggles: the gate screen shows a ⚠.
+- Breaks, then check out the same way. To finish the shift in the past, run the curl above with `"minutes": -500`.
+- Business app → **Timesheets** → **Approve** (or dispute a few minutes: only those are held).
+- Payouts run every 15 seconds (or `curl -X POST localhost:4000/dev/jobs/run`). The worker's **Earnings** tab shows the payslip.
+- Two hours after a shift ends it closes: unused money goes back to the business and a GST invoice appears under **Invoices**.
+
+**4. Review as ops** (http://localhost:3001)
 - **verifier@** approves businesses and new sites; **compliance@** handles shift review (gender requirements),
   minimum wage rates and policy changes, both of which need a second compliance officer; **safety@** can pause a site.
 - A shift posted with words like "registration fee", "fair skin", "only girls" or "aadhaar copy" goes to **Shift review** instead of going live.
+- **finance@** sees held/failed payouts, approves manual payouts (a second finance login must approve), and runs **Reconciliation**.
+- **disputes@** decides disputed timesheet minutes, with the attendance evidence on screen.
 
 Local login codes: each network can request 10 codes an hour (a real anti-abuse rule). If you hit it while testing,
 wait an hour or run `npm run db:reset`.
@@ -139,7 +159,7 @@ Runs unit tests (money, minimum wage, phone, crypto, 2FA) and API tests against 
 (`shiftkart_test`), including the 200-people-tap-at-once booking test. Abuse-case tests live in
 `apps/api/test/abuse/`. [docs/ABUSE_CASES.md](docs/ABUSE_CASES.md) maps each case to its test.
 
-End-to-end browser tests (a business journey and a worker journey on a phone-sized screen):
+End-to-end browser tests (business signup to live shift; worker signup in Hindi on a phone-sized screen; and a full shift day across both apps):
 
 ```bash
 npm run test:e2e

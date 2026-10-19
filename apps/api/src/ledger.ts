@@ -10,6 +10,7 @@ export async function postJournal(
   tx: Tx,
   j: { kind: string; refType: string; refId: string; idempotencyKey: string; memo?: string; createdBy?: string | null },
   postings: Posting[],
+  opts: { nonNegative?: string[] } = {},
 ): Promise<{ journalId: string; duplicate: boolean }> {
   const sum = postings.reduce((a, p) => a + p.amountPaise, 0);
   if (sum !== 0) throw new Error(`unbalanced journal (${sum})`);
@@ -33,6 +34,11 @@ export async function postJournal(
     );
     await tx.query('INSERT INTO ledger_entries (journal_id, account_id, amount_paise) VALUES ($1, $2, $3)', [journalId, acct.rows[0].id, p.amountPaise]);
   }
+  // SYS-05: money we hold for a shift can never go below zero (no paying out more than was funded).
+  for (const code of opts.nonNegative ?? []) {
+    const bal = await accountBalance(tx, code);
+    if (bal < 0) throw new Error(`insufficient funds in ${code} (would be ${bal})`);
+  }
   return { journalId, duplicate: false };
 }
 
@@ -44,5 +50,11 @@ export async function accountBalance(tx: Tx | import('pg').Pool, code: string): 
   return r.rows[0].bal;
 }
 
-export const escrowAccount = (businessId: string) => `business_escrow:${businessId}`;
+/** Money held for one shift: funded in, wages/fees/refunds out. Settles to zero when the shift closes. */
+export const shiftEscrow = (shiftId: string) => `shift_escrow:${shiftId}`;
+export const workerPayable = (workerId: string) => `worker_payable:${workerId}`;
+export const PLATFORM_REVENUE = 'platform_revenue';
+export const GST_PAYABLE = 'gst_payable';
+export const CHARGEBACK_LOSS = 'chargeback_loss';
+export const PLATFORM_ADJUSTMENTS = 'platform_adjustments';
 export const clearingAccount = (provider: string) => `provider_clearing:${provider}`;

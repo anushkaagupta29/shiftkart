@@ -5,12 +5,14 @@ import type { AppDeps } from '../app';
 import { withTx } from '../db';
 import { writeAudit } from '../audit';
 import { raiseFlag } from '../fraud';
-import { clearingAccount, escrowAccount, postJournal } from '../ledger';
+import { clearingAccount, postJournal, shiftEscrow } from '../ledger';
 import { parse } from '../lib/validate';
 import { HttpError, badRequest, conflict, notFound } from '../lib/errors';
 import { userActor } from '../auth/guard';
 import { requireMember } from './businesses';
 import { MOCKPAY_SIG_HEADER, newProviderRef, signWebhook, verifyWebhookSignature, type MockpayEvent } from '../adapters/mockpay';
+import { handleChargeback, handlePayoutReversal } from '../money';
+import { overtimeFunded } from '../overtime';
 
 const PROVIDER = 'mockpay';
 const bizAuth = { auth: { user: { kinds: ['business' as const] } } };
@@ -19,7 +21,7 @@ const IntentParams = z.object({ businessId: z.string().uuid(), intentId: z.strin
 
 const Event = z.object({
   id: z.string().min(5).max(100),
-  type: z.enum(['payment.captured', 'payment.failed']),
+  type: z.enum(['payment.captured', 'payment.failed', 'payment.chargeback', 'payout.reversed']),
   data: z.object({ orderRef: z.string().max(100), amountPaise: z.number().int().positive() }),
 });
 
@@ -95,6 +97,8 @@ export async function paymentRoutes(app: FastifyInstance, deps: AppDeps) {
       const eventRow = ins.rows[0].id;
       const done = (outcome: string) => tx.query('UPDATE webhook_events SET processed_at = now(), outcome = $2 WHERE id = $1', [eventRow, outcome]).then(() => ({ ok: true, outcome }));
 
+      if (event.type === 'payment.chargeback') return done(await handleChargeback(tx, event.data.orderRef, event.data.amountPaise));
+      if (event.type === 'payout.reversed') return done(await handlePayoutReversal(tx, event.data.orderRef));
       const intent = (await tx.query('SELECT * FROM payment_intents WHERE provider_ref = $1 FOR UPDATE', [event.data.orderRef])).rows[0];
       if (!intent) return done('unknown_order');
       if (event.type === 'payment.failed') {
@@ -109,9 +113,13 @@ export async function paymentRoutes(app: FastifyInstance, deps: AppDeps) {
       }
       await tx.query(`UPDATE payment_intents SET status = 'captured', captured_at = now() WHERE id = $1`, [intent.id]);
       await postJournal(tx, { kind: 'fund', refType: 'payment_intent', refId: intent.id, idempotencyKey: `fund:${intent.id}`, memo: 'Shift funded' }, [
-        { account: escrowAccount(intent.business_id), type: 'business_escrow', ownerId: intent.business_id, amountPaise: Number(intent.amount_paise) },
+        { account: shiftEscrow(intent.shift_id), type: 'shift_escrow', ownerId: intent.business_id, amountPaise: Number(intent.amount_paise) },
         { account: clearingAccount(PROVIDER), type: 'provider_clearing', amountPaise: -Number(intent.amount_paise) },
       ]);
+      if (intent.purpose === 'overtime') {
+        await overtimeFunded(tx, intent.overtime_request_id, deps.sms, config.dataKey);
+        return done('captured_overtime');
+      }
       const pub = await tx.query(
         `UPDATE shifts SET status = 'live', published_at = now() WHERE id = $1 AND status = 'pending_funding' RETURNING id`,
         [intent.shift_id],
@@ -136,6 +144,13 @@ export async function paymentRoutes(app: FastifyInstance, deps: AppDeps) {
       const { outcome, amountPaise } = parse(z.object({ outcome: z.enum(['success', 'failure']), amountPaise: z.number().int().positive().optional() }).strict(), req.body);
       const i = (await db.query('SELECT * FROM payment_intents WHERE id = $1', [intentId])).rows[0];
       if (!i) throw notFound();
+      // The provider's own books record the capture, independently of whether our webhook handler works.
+      if (outcome === 'success') {
+        await db.query(
+          `INSERT INTO mock_provider_ledger (kind, ref, idempotency_key, amount_paise) VALUES ('capture', $1, $2, $3) ON CONFLICT DO NOTHING`,
+          [i.provider_ref, `capture:${i.provider_ref}`, amountPaise ?? Number(i.amount_paise)],
+        );
+      }
       const event: MockpayEvent = {
         id: `evt_${randomUUID()}`,
         type: outcome === 'success' ? 'payment.captured' : 'payment.failed',

@@ -34,6 +34,7 @@ describe('route inventory', () => {
     expect(pub).toEqual([
       'GET /health',
       'GET /reference', // cities, roles, skills: no personal data
+      'GET /safety/share/:token', // trusted contact's SOS page; the unguessable, expiring link is the key
       'POST /admin/auth/login',
       'POST /auth/otp/request',
       'POST /auth/otp/verify',

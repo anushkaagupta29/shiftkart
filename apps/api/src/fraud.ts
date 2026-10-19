@@ -1,6 +1,7 @@
 import type { Queryable } from './db';
+import { BLOCKING_FLAGS, recomputeWorkerVerification } from './worker-status';
 
-export type FlagSubject = 'worker' | 'business' | 'shift' | 'device' | 'payout_method' | 'system';
+export type FlagSubject = 'worker' | 'business' | 'shift' | 'device' | 'payout_method' | 'system' | 'staff';
 
 /** Opens a fraud flag for human review. One open flag per subject + rule (duplicates are merged). */
 export async function raiseFlag(db: Queryable, subjectType: FlagSubject, subjectId: string, ruleCode: string, evidence: Record<string, unknown> = {}, score = 50) {
@@ -10,4 +11,6 @@ export async function raiseFlag(db: Queryable, subjectType: FlagSubject, subject
      DO UPDATE SET evidence = fraud_flags.evidence || EXCLUDED.evidence, score = GREATEST(fraud_flags.score, EXCLUDED.score)`,
     [subjectType, subjectId, ruleCode, score, JSON.stringify(evidence)],
   );
+  // Flags that need a person to look (duplicate identity, underage report, ...) pause the worker's verification.
+  if (subjectType === 'worker' && BLOCKING_FLAGS.includes(ruleCode)) await recomputeWorkerVerification(db, subjectId);
 }

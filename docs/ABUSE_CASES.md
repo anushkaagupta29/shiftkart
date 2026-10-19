@@ -13,11 +13,8 @@ Actors: 🏢 business · 👷 worker · 🧑‍💼 our staff · 🌐 outsider �
 | ACC-04 Ex-member access | ✅ Phase 1 | `abuse/ACC-04.test.ts` |
 | ACC-01 SIM swap / stolen phone | ◐ Phase 2 part: changing the payout account needs a fresh live selfie and starts a 24 h cooldown. Limited new-device sessions in Phase 3. | `abuse/WRK-01.test.ts` (MON-04 block) |
 | BIZ-01 Fake jobs to harvest IDs | ✅ Phase 2 part: unverified businesses can't post; posts asking for documents go to review; businesses never see KYC data. Chat warnings in Phase 4. | `abuse/BIZ.test.ts`, `integration/phase2-journey.test.ts` |
-| BIZ-02 Fees / deposits | ◐ Phase 2 part: fee/deposit wording in posts goes to review; no worker-pays flow exists. Chat filter in Phase 4. | `abuse/BIZ.test.ts` |
 | BIZ-03 Illegal / dangerous jobs | ✅ Phase 2 (fixed role list, keyword review, high-hazard review, own verified sites only) | `abuse/BIZ.test.ts` |
 | BIZ-04 Someone else's GSTIN | ✅ Phase 2 | `abuse/BIZ.test.ts` |
-| BIZ-05 Bait-and-switch edits | ◐ Phase 2: shifts can't be edited at all (D-039). "Work didn't match" reports in Phase 4. | `security/rbac-matrix.test.ts` (route inventory) |
-| BIZ-06 Stalking via shifts | ◐ Phase 2: roster shows first name only; no invites or worker search. Blocking in Phase 4. | `integration/phase2-journey.test.ts` |
 | BIZ-07 Discrimination | ✅ Phase 2 (no free-text requirements, keyword review, gender requirements need compliance) | `abuse/BIZ.test.ts` |
 | PAY-04 Allowances to dodge minimum wage | ✅ Phase 2 | `unit/shift-cost.test.ts`, `abuse/BIZ.test.ts` |
 | PAY-05 Wrong wage category | ✅ Phase 2 | `unit/shift-cost.test.ts`, `abuse/BIZ.test.ts` |
@@ -28,7 +25,6 @@ Actors: 🏢 business · 👷 worker · 🧑‍💼 our staff · 🌐 outsider �
 | WRK-04 GPS spoofing | ✅ Phase 3 (flagged, shown to supervisor, sent to review; not silently blocked) | `abuse/ATTENDANCE.test.ts` |
 | WRK-05 Screenshotted QR | ✅ Phase 3 (30 s codes, ±1 step, bound to shift; geofence + selfie still required) | `unit/phase3.test.ts`, `abuse/ATTENDANCE.test.ts` |
 | WRK-12 Check in and leave | ✅ Phase 3 (location pings with consent; 20+ min away → flag; business can dispute minutes) | `abuse/ATTENDANCE.test.ts` |
-| WRK-06 Underage | ✅ Phase 2 | `abuse/WRK-01.test.ts` |
 | WRK-07 Re-registering | ✅ Phase 2 | `abuse/WRK-01.test.ts` |
 | WRK-08 Slot hoarding | ✅ Phase 2 | `abuse/SYS-02.test.ts` |
 | WRK-09 Bots | ◐ Phase 2 + 3: per-worker accept rate limit; device integrity verdict checked at check-in (mock). Integrity on accept with the real Play Integrity API at go-live. | `abuse/SYS-09.test.ts`, `abuse/ATTENDANCE.test.ts` |
@@ -39,10 +35,7 @@ Actors: 🏢 business · 👷 worker · 🧑‍💼 our staff · 🌐 outsider �
 | MSG-06 PII in logs | ✅ Phase 1 | `abuse/MSG-06.test.ts` |
 | INT-01 Silent edits | ✅ audit log, policy, ledger, attendance and payslips append-only; timesheet amounts frozen by trigger; no edit routes | `abuse/INT-01.test.ts`, `abuse/SYS-04.test.ts`, `abuse/MONEY.test.ts`, `abuse/ATTENDANCE.test.ts` |
 | INT-02 Masked personal data | ✅ Phase 1 + 2 (phones, payout details finance-only and masked) | `abuse/INT-02.test.ts`, `abuse/INT-06.test.ts` |
-| INT-04 Ops colluding | ◐ Phase 2: high-risk businesses need two different verifiers. Sampling and reviewer stats in Phase 4. | `abuse/BIZ.test.ts` |
-| INT-05 Bulk export | ◐ page caps, instant offboarding. Read-volume alerts in Phase 4. | `abuse/INT-05.test.ts` |
 | INT-06 Wage-table tampering | ✅ Phase 2 (two-person approval, no backdating, amounts frozen; same for policy values) | `abuse/INT-06.test.ts` |
-| SAF-04 Pause a site | ◐ Phase 2: pausing hides shifts and blocks posting. Compensation in Phase 4. | `abuse/SYS-09.test.ts` |
 | SYS-01 Double-booking the last slot | ✅ Phase 2 (200 concurrent → exactly 1; 200 → exactly 30) | `abuse/SYS-01.test.ts` |
 | SYS-02 Overlaps / rest gap | ✅ Phase 2 | `abuse/SYS-02.test.ts` |
 | SYS-04 Webhook forgery / replay | ✅ Phase 2 | `abuse/SYS-04.test.ts` |
@@ -55,12 +48,33 @@ Actors: 🏢 business · 👷 worker · 🧑‍💼 our staff · 🌐 outsider �
 | PAY-07 Unfunded overtime | ✅ Phase 3 (worker can't accept until the business has paid; paid at 2×) | `abuse/MONEY.test.ts` |
 | PAY-09 Chargeback after payout | ✅ Phase 3 (workers keep pay; business suspended; loss booked) | `abuse/MONEY.test.ts` |
 | PAY-12 Supervisor ghost workers | ✅ Phase 3 (hand-marked attendance unpaid until the worker confirms with a selfie; worker can reject; high manual ratio flagged) | `abuse/ATTENDANCE.test.ts` |
-| MON-02 Laundering | ◐ Phase 3: payout caps, refunds only to the original payment, KYC both sides. Velocity rules in Phase 4. | `abuse/MONEY.test.ts` |
 | INT-03 Manual payouts to self | ✅ Phase 3 (two finance officers, verified account only, daily limit) | `abuse/MONEY.test.ts` |
 | SYS-03 Double payout | ✅ Phase 3 (parallel runners and crash-after-transfer both pay once) | `abuse/MONEY.test.ts` |
 | SYS-05 Payout vs refund race | ✅ Phase 3 (settlement waits for final timesheets; escrow can't go negative) | `abuse/MONEY.test.ts` |
 | SYS-08 Offline clock tampering | ✅ Phase 3 (time taken from the gate code; drift flagged; >24 h refused) | `abuse/ATTENDANCE.test.ts` |
-| End-to-end journeys | ✅ business (signup → verification → ops approval → post → fund → live); worker (Hindi signup → onboarding → accept); shift day (gate code → check-in/out → approve → paid → payslip) | `e2e/*.spec.ts` (repo root) |
+| PAY-03 Repeated late cancels | ✅ Phase 4 (automatic compensation from escrow; 3 late cancels in 30 days → flag + new shifts reviewed) | `abuse/TRUST.test.ts`, `e2e/trust.spec.ts` |
+| PAY-08 Revenge ratings / extortion | ✅ Phase 4 (blind ratings, weighted score, harsh raters flagged) | `unit/ratings.test.ts`, `abuse/COMMUNITY.test.ts` |
+| PAY-11 Turned away unpaid | ✅ Phase 4 (turn-away pay; no route marks a checked-in worker a no-show) | `abuse/TRUST.test.ts` |
+| WRK-10 Emergency abuse | ✅ Phase 4 | `abuse/TRUST.test.ts` |
+| WRK-11 False disputes / fake SOS | ✅ Phase 4 (disputes judged against attendance evidence; SOS never changes pay) | `abuse/COMMUNITY.test.ts`, `abuse/MONEY.test.ts` |
+| BIZ-02 Fees / deposits | ✅ Phase 2 + 4 (posts reviewed; chat blocks money requests, warns the worker, flags the business) | `abuse/BIZ.test.ts`, `abuse/COMMUNITY.test.ts`, `e2e/trust.spec.ts` |
+| BIZ-05 Bait-and-switch | ✅ Phase 2 + 4 (no edits; "work didn't match" reports → flag at 3) | `abuse/COMMUNITY.test.ts` |
+| BIZ-06 Stalking via shifts | ✅ Phase 2 + 4 (minimal roster; worker can block a business) | `abuse/COMMUNITY.test.ts` |
+| OFF-01 Off-platform hiring | ✅ Phase 4 (masked contact; honest hire route with business-paid fee; worker never penalised) | `abuse/COMMUNITY.test.ts` |
+| MON-01 Self-dealing | ✅ Phase 4 (worker on a business member's phone can't take its shifts) | `abuse/COMMUNITY.test.ts` |
+| MON-02 Laundering | ✅ Phase 3 + 4 (caps, refunds to source, new-business velocity flag) | `abuse/MONEY.test.ts`, `abuse/COMMUNITY.test.ts` |
+| MON-03 Money-mule recruiting in chat | ✅ Phase 4 (money requests blocked) | `unit/chat-filter.test.ts` |
+| MSG-02 Spam / abuse in chat | ✅ Phase 4 (rate limit, abuse filter, report, block) | `abuse/COMMUNITY.test.ts` |
+| MSG-03 Scam links / payment requests | ✅ Phase 4 | `unit/chat-filter.test.ts`, `abuse/COMMUNITY.test.ts` |
+| MSG-04 Number harvesting | ✅ Phase 4 (numbers masked, masked calling) | `unit/chat-filter.test.ts`, `abuse/COMMUNITY.test.ts` |
+| INT-04 Ops collusion | ✅ Phase 2 + 4 (two approvers for high risk; random re-review; verifier oversight) | `abuse/BIZ.test.ts`, `abuse/COMMUNITY.test.ts` |
+| INT-05 Bulk export | ✅ Phase 1 + 4 (page caps, instant offboarding, read-volume flag) | `abuse/INT-05.test.ts`, `abuse/COMMUNITY.test.ts` |
+| SAF-01 Harassment | ✅ Phase 4 (easy report, anonymous option, human queue, business can't read reports) | `abuse/COMMUNITY.test.ts` |
+| SAF-02 Emergency | ✅ Phase 4 (SOS → safety desk, trusted-contact live link that expires) | `abuse/COMMUNITY.test.ts`, `e2e/trust.spec.ts` |
+| SAF-03 Night shifts | ✅ Phase 4 (transport promise + worker consent) | `abuse/TRUST.test.ts` |
+| SAF-04 Site pause | ✅ Phase 2 + 4 (pause cancels upcoming shifts with compensation) | `abuse/SYS-09.test.ts`, `abuse/TRUST.test.ts` |
+| WRK-06 Underage | ✅ Phase 2 + 4 (ID-based age; supervisor report → review) | `abuse/WRK-01.test.ts`, `abuse/COMMUNITY.test.ts` |
+| End-to-end journeys | ✅ business signup → live shift; worker Hindi signup → accept; shift day → paid; trust (scam message blocked, SOS on safety desk, late cancel compensated) | `e2e/*.spec.ts` (repo root) |
 | All others | ⏳ Planned for the phase listed on each case | — |
 
 ---|---|---|
@@ -72,7 +86,6 @@ Actors: 🏢 business · 👷 worker · 🧑‍💼 our staff · 🌐 outsider �
 | MSG-06 PII in logs | ✅ Phase 1 | `apps/api/test/abuse/MSG-06.test.ts` |
 | INT-01 Silent edits | ✅ Phase 1 part (audit log, policy). Timesheet/ledger parts come in Phase 3. | `apps/api/test/abuse/INT-01.test.ts` |
 | INT-02 Masked personal data | ✅ Phase 1 part (phones). Bank details come in Phase 2/3. | `apps/api/test/abuse/INT-02.test.ts` |
-| INT-05 Bulk export | ✅ Phase 1 part (page caps, instant offboarding). Read-volume alerts come in Phase 4. | `apps/api/test/abuse/INT-05.test.ts` |
 | All others | ⏳ Planned for the phase listed on each case | — |
 
 ---

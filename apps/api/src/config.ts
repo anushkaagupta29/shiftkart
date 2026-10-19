@@ -11,6 +11,7 @@ export type Config = {
   rateLimitPerMin: number;
   otpGlobalHourly: number;
   mockpayWebhookSecret: string;
+  publicApiUrl: string;
   logLevel: string;
 };
 
@@ -28,6 +29,7 @@ export function loadConfig(overrides: Partial<Config> = {}): Config {
     rateLimitPerMin: Number(process.env.RATE_LIMIT_PER_MIN ?? 300),
     otpGlobalHourly: Number(process.env.OTP_GLOBAL_HOURLY ?? 1000),
     mockpayWebhookSecret: requireEnv('MOCKPAY_WEBHOOK_SECRET'),
+    publicApiUrl: process.env.PUBLIC_API_URL ?? 'http://localhost:4000',
     logLevel: process.env.LOG_LEVEL ?? 'info',
     ...overrides,
   };

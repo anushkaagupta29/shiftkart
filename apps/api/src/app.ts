@@ -28,6 +28,7 @@ import { MockIntegrity, MockPayouts, type IntegrityVerifier, type PayoutProvider
 import { workerAttendanceRoutes } from './routes/worker-attendance';
 import { businessAttendanceRoutes } from './routes/business-attendance';
 import { adminFinanceRoutes } from './routes/admin-finance';
+import { trustRoutes } from './routes/trust-routes';
 import './auth/types';
 
 export type AppDeps = {
@@ -90,6 +91,7 @@ export async function buildApp(config: Config, db: Db, opts: { sms?: SmsSender; 
   await app.register(async (s) => workerAttendanceRoutes(s, deps));
   await app.register(async (s) => businessAttendanceRoutes(s, deps));
   await app.register(async (s) => adminFinanceRoutes(s, deps));
+  await app.register(async (s) => trustRoutes(s, deps));
   if (config.devEndpoints && config.env !== 'production') await app.register(async (s) => devRoutes(s, deps));
 
   return app;

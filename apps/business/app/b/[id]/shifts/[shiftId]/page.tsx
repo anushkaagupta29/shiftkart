@@ -38,9 +38,27 @@ function ShiftDetail() {
     } catch (e) { setErr(errText(e)); }
   };
   const cancel = async () => {
-    const reason = prompt('Why are you withdrawing this shift?');
+    let warning = 'Withdraw this shift? Nothing has been charged.';
+    if (s?.status === 'live') {
+      const p = await api(`/businesses/${id}/shifts/${shiftId}/cancel-preview`);
+      warning = `Cancel this live shift? It starts in ${p.hoursBefore} hours. ${p.bookedWorkers} booked worker(s) will each get ${p.compensationPercent}% of their shift pay (₹${(p.perWorkerPayPaise * p.compensationPercent / 10000).toFixed(2)}) from your funded amount${p.checkedIn ? `, and ${p.checkedIn} already at the site get the turn-away amount` : ''}. The rest is refunded.`;
+    }
+    const reason = prompt(`${warning}\n\nReason (shown to workers):`);
     if (!reason) return;
-    try { await api(`/businesses/${id}/shifts/${shiftId}/cancel`, { method: 'POST', body: { reason } }); load(); } catch (e) { setErr(errText(e)); }
+    try { const r = await api(`/businesses/${id}/shifts/${shiftId}/cancel`, { method: 'POST', body: { reason } }); if (r.compensationPaise) alert(`Cancelled. ${rupees(r.compensationPaise)} paid to workers as compensation; the rest is refunded.`); load(); } catch (e) { setErr(errText(e)); }
+  };
+  const rowAct = async (fn: () => Promise<unknown>, done?: string) => { setErr(''); try { await fn(); if (done) alert(done); load(); } catch (e) { setErr(errText(e)); } };
+  const rateWorker = (bookingId: string, name: string) => {
+    const stars = prompt(`Rate ${name} from 1 to 5. They won't see it until they rate you too.`);
+    if (stars) rowAct(() => api(`/businesses/${id}/bookings/${bookingId}/rating`, { method: 'POST', body: { stars: Number(stars) } }), 'Thanks for rating.');
+  };
+  const hire = (bookingId: string, name: string) => {
+    const roleTitle = prompt(`Offer ${name} a full-time job. Role title:`);
+    if (roleTitle) rowAct(() => api(`/businesses/${id}/hire-requests`, { method: 'POST', body: { bookingId, roleTitle } }), `Offer sent. ${name} can accept or decline in the app. See Hires.`);
+  };
+  const turnAwayW = (bookingId: string, name: string) => {
+    const reason = prompt(`Send ${name} home (site not ready)? They get the turn-away payment for turning up. Reason:`);
+    if (reason) rowAct(() => api(`/businesses/${id}/bookings/${bookingId}/turn-away`, { method: 'POST', body: { reason } }));
   };
   if (!s) return <p className="muted">{err || 'Loading…'}</p>;
   return (
@@ -62,6 +80,7 @@ function ShiftDetail() {
           {s.status === 'live' && <a href={`/b/${id}/shifts/${shiftId}/gate`}><button>Open gate screen (check-in code)</button></a>}
           {s.status === 'pending_funding' && <button onClick={fund}>Fund {rupees(s.totalPaise)}</button>}
           {['pending_funding', 'pending_review'].includes(s.status) && <button className="secondary" onClick={cancel}>Withdraw</button>}
+          {s.status === 'live' && <button className="danger" onClick={cancel}>Cancel shift…</button>}
         </p>
         {err && <p className="err">{err}</p>}
       </div>
@@ -79,8 +98,17 @@ function ShiftDetail() {
       )}
       <div className="panel">
         <h3 style={{ marginTop: 0 }}>Workers</h3>
-        <table><thead><tr><th>Name</th><th>Status</th><th>Booked</th></tr></thead>
-          <tbody>{s.roster.map((r) => <tr key={r.bookingId}><td>{r.firstName}</td><td>{r.status}</td><td>{ist(r.bookedAt)}{r.source === 'waitlist' ? ' (from waitlist)' : ''}</td></tr>)}</tbody></table>
+        <table><thead><tr><th>Name</th><th>Status</th><th>Booked</th><th /></tr></thead>
+          <tbody>{s.roster.map((r) => (
+            <tr key={r.bookingId}><td>{r.firstName}</td><td>{r.status.replace('_', ' ')}</td><td>{ist(r.bookedAt)}{r.source === 'waitlist' ? ' (from waitlist)' : ''}</td>
+              <td className="row">
+                {['confirmed', 'checked_in', 'completed', 'turned_away'].includes(r.status) && <a href={`/b/${id}/chat/${r.bookingId}`}><button className="secondary">Chat</button></a>}
+                {r.status === 'checked_in' && <button className="secondary" onClick={() => turnAwayW(r.bookingId, r.firstName)}>Send home (paid)</button>}
+                {['completed', 'turned_away'].includes(r.status) && <button className="secondary" onClick={() => rateWorker(r.bookingId, r.firstName)}>Rate</button>}
+                {r.status === 'completed' && <button className="secondary" onClick={() => hire(r.bookingId, r.firstName)}>Offer full-time job</button>}
+                <a href={`/b/${id}/report?booking=${r.bookingId}`}><button className="secondary">Report</button></a>
+              </td></tr>
+          ))}</tbody></table>
         {s.roster.length === 0 && <p className="muted">Nobody yet.</p>}
       </div>
     </>

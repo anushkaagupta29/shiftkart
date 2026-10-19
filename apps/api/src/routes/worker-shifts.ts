@@ -4,7 +4,9 @@ import type { AppDeps } from '../app';
 import { parse } from '../lib/validate';
 import { notFound } from '../lib/errors';
 import { userActor } from '../auth/guard';
-import { acceptShift, cancelBookingByWorker, eligibility, joinWaitlist, respondToOffer } from '../booking';
+import { acceptShift, eligibility, joinWaitlist, respondToOffer } from '../booking';
+import { cancelByWorker } from '../trust';
+import { businessRating } from '../community';
 
 const workerAuth = { auth: { user: { kinds: ['worker' as const] } } };
 export const ACCEPT_ATTEMPTS_PER_MIN = 10;
@@ -20,7 +22,7 @@ const Search = z.object({
 const SHIFT_COLUMNS = `
   s.id, s.title, s.description, s.role_code, r.name_i18n AS role_name, s.starts_at, s.ends_at, s.break_minutes,
   s.headcount, s.filled_count, s.pay_type, s.pay_paise, s.meal_allowance_paise, s.travel_allowance_paise,
-  s.requirements, s.dress_code, s.bring_items, s.cost, s.status,
+  s.requirements, s.dress_code, s.bring_items, s.cost, s.status, s.is_night, s.night_transport_attested, s.business_id,
   COALESCE(b.trade_name, b.legal_name) AS business_name, si.name AS site_name, si.address,
   ST_Y(si.location::geometry) AS lat, ST_X(si.location::geometry) AS lng`;
 
@@ -39,7 +41,8 @@ function workerShiftView(s: Record<string, any>, worker?: Record<string, any>) {
     },
     slotsLeft: Math.max(0, s.headcount - s.filled_count), headcount: s.headcount,
     requirements: s.requirements, dressCode: s.dress_code, bringItems: s.bring_items,
-    eligible: elig.eligible, missing: elig.missing,
+    eligible: elig.eligible, missing: elig.missing, isNight: s.is_night, transportProvided: s.night_transport_attested, businessId: s.business_id,
+    businessRating: s.business_rating ?? null,
     myWaitlist: s.wl_status ? { id: s.wl_id, status: s.wl_status, expiresAt: s.wl_expires } : null,
   };
 }
@@ -67,10 +70,13 @@ export async function workerShiftRoutes(app: FastifyInstance, { db, sms, config 
         WHERE s.status = 'live' AND s.starts_at > now() AND si.status = 'active' AND b.verification_status = 'verified'
           AND ST_DWithin(si.location, ST_MakePoint($2, $3)::geography, $4 * 1000)
           AND NOT EXISTS (SELECT 1 FROM bookings bk WHERE bk.shift_id = s.id AND bk.worker_id = $1 AND bk.status = 'confirmed')
+          AND NOT EXISTS (SELECT 1 FROM worker_blocks wb WHERE wb.worker_id = $1 AND wb.business_id = s.business_id)
         ORDER BY s.starts_at LIMIT 50`,
       [a.userId, lng, lat, radiusKm],
     );
-    const items = r.rows.map((s) => workerShiftView(s, w));
+    const ratings = new Map<string, unknown>();
+    for (const s of r.rows) if (!ratings.has(s.business_id)) ratings.set(s.business_id, await businessRating(db, s.business_id));
+    const items = r.rows.map((s) => workerShiftView({ ...s, business_rating: ratings.get(s.business_id) }, w));
     // Once the profile is done, only shifts the worker actually qualifies for are shown.
     return { items: w?.profile_completed_at ? items.filter((s) => s.eligible) : items, radiusKm };
   });
@@ -101,7 +107,8 @@ export async function workerShiftRoutes(app: FastifyInstance, { db, sms, config 
   app.post('/worker/shifts/:id/accept', { config: { ...workerAuth, rateLimit: acceptLimit } }, async (req, reply) => {
     const a = userActor(req);
     const { id } = parse(IdParam, req.params);
-    const b = await acceptShift(db, a.userId, id);
+    const { nightConsent } = parse(z.object({ nightConsent: z.boolean().optional() }).strict(), req.body ?? {});
+    const b = await acceptShift(db, a.userId, id, { nightConsent });
     reply.code(201);
     return { bookingId: b.id, status: b.status, startsAt: b.starts_at, endsAt: b.ends_at };
   });
@@ -139,7 +146,8 @@ export async function workerShiftRoutes(app: FastifyInstance, { db, sms, config 
   app.post('/worker/bookings/:id/cancel', { config: workerAuth }, async (req) => {
     const a = userActor(req);
     const { id } = parse(IdParam, req.params);
-    return cancelBookingByWorker(db, a.userId, id, sms, config.dataKey);
+    const body = parse(z.object({ emergency: z.object({ reason: z.string().trim().min(5).max(500) }).strict().optional() }).strict(), req.body ?? {});
+    return cancelByWorker(db, a.userId, id, { emergency: body.emergency }, { sms, dataKey: config.dataKey });
   });
 
   app.get('/worker/offers', { config: workerAuth }, async (req) => {

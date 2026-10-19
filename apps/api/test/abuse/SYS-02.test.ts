@@ -9,7 +9,8 @@ let b: Biz;
 beforeAll(async () => { ctx = await makeApp(); await resetData(ctx.db); await seedRates(ctx); b = await verifiedBusiness(ctx); });
 afterAll(async () => closeApp(ctx));
 
-const accept = (w: { auth: object }, id: string) => ctx.app.inject({ method: 'POST', url: `/worker/shifts/${id}/accept`, headers: w.auth as Record<string, string> });
+// nightConsent is required for night shifts (SPEC §6.10) and harmless for day shifts.
+const accept = (w: { auth: object }, id: string) => ctx.app.inject({ method: 'POST', url: `/worker/shifts/${id}/accept`, headers: w.auth as Record<string, string>, payload: { nightConsent: true } });
 
 describe('SYS-02 overlaps and rest', () => {
   it('parallel accepts of two overlapping shifts: only one succeeds', async () => {
@@ -26,7 +27,7 @@ describe('SYS-02 overlaps and rest', () => {
   it('back-to-back shifts with less than the rest gap are refused', async () => {
     const w = await verifiedWorker(ctx);
     const day = await liveShift(ctx, b, { startsAt: istSlot(5, 8), endsAt: istSlot(5, 14) });
-    const evening = await liveShift(ctx, b, { startsAt: istSlot(5, 18), endsAt: istSlot(5, 22) }); // 4h gap < 8h
+    const evening = await liveShift(ctx, b, { startsAt: istSlot(5, 18), endsAt: istSlot(5, 22), nightTransportAttested: true }); // 4h gap < 8h
     expect((await accept(w, day.id)).statusCode).toBe(201);
     const r = await accept(w, evening.id);
     expect(r.statusCode).toBe(409);
@@ -35,7 +36,7 @@ describe('SYS-02 overlaps and rest', () => {
 
   it('SYS-07: a 22:00–06:00 IST night shift is 8 hours and counts on its start day', async () => {
     const w = await verifiedWorker(ctx);
-    const night = await liveShift(ctx, b, { startsAt: istSlot(7, 22), endsAt: istSlot(8, 6), breakMinutes: 0 });
+    const night = await liveShift(ctx, b, { startsAt: istSlot(7, 22), endsAt: istSlot(8, 6), breakMinutes: 0, nightTransportAttested: true });
     expect(night.cost.paidMinutes).toBe(480);
     expect((await accept(w, night.id)).statusCode).toBe(201);
     // Next day 16:00-20:00 is fine (10h rest after 06:00).

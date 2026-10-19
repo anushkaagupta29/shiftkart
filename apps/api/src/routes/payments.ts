@@ -13,6 +13,7 @@ import { requireMember } from './businesses';
 import { MOCKPAY_SIG_HEADER, newProviderRef, signWebhook, verifyWebhookSignature, type MockpayEvent } from '../adapters/mockpay';
 import { handleChargeback, handlePayoutReversal } from '../money';
 import { overtimeFunded } from '../overtime';
+import { hireFeePaid } from '../conversion';
 
 const PROVIDER = 'mockpay';
 const bizAuth = { auth: { user: { kinds: ['business' as const] } } };
@@ -112,10 +113,14 @@ export async function paymentRoutes(app: FastifyInstance, deps: AppDeps) {
         return done('amount_mismatch');
       }
       await tx.query(`UPDATE payment_intents SET status = 'captured', captured_at = now() WHERE id = $1`, [intent.id]);
-      await postJournal(tx, { kind: 'fund', refType: 'payment_intent', refId: intent.id, idempotencyKey: `fund:${intent.id}`, memo: 'Shift funded' }, [
+      if (intent.purpose !== 'conversion') await postJournal(tx, { kind: 'fund', refType: 'payment_intent', refId: intent.id, idempotencyKey: `fund:${intent.id}`, memo: 'Shift funded' }, [
         { account: shiftEscrow(intent.shift_id), type: 'shift_escrow', ownerId: intent.business_id, amountPaise: Number(intent.amount_paise) },
         { account: clearingAccount(PROVIDER), type: 'provider_clearing', amountPaise: -Number(intent.amount_paise) },
       ]);
+      if (intent.purpose === 'conversion') {
+        await hireFeePaid(tx, intent.hire_request_id, intent.id);
+        return done('captured_conversion');
+      }
       if (intent.purpose === 'overtime') {
         await overtimeFunded(tx, intent.overtime_request_id, deps.sms, config.dataKey);
         return done('captured_overtime');

@@ -4,15 +4,16 @@ import { useEffect, useState } from 'react';
 import { Shell } from './components/Shell';
 import { api } from './lib/api';
 
-type Summary = { workers: number; verifiedWorkers: number; businessUsers: number; businesses: number; businessesPendingVerification: number; suspendedUsers: number; shiftsPendingReview: number; liveShifts: number; openFraudFlags: number; sitesPendingReview: number; payoutsOverdue: number; payoutsHeld: number; disputesOpen: number; reconciliationMismatches: number };
+type Summary = { workers: number; verifiedWorkers: number; businessUsers: number; businesses: number; businessesPendingVerification: number; suspendedUsers: number; shiftsPendingReview: number; liveShifts: number; openFraudFlags: number; sitesPendingReview: number; payoutsOverdue: number; payoutsHeld: number; disputesOpen: number; reconciliationMismatches: number; sosOpen: number; incidentsOpen: number; appealsOpen: number; casesOverdue: number };
 
-const QUEUES = [['Full dispute workflow', 'Phase 4'], ['SOS & incidents', 'Phase 4'], ['Strike appeals', 'Phase 4']];
+const QUEUES: [string, string][] = [];
 const METRICS = ['Fill rate', 'No-show rate', 'Time to fill', 'Payout delay', 'Dispute rate', 'Fraud flags'];
 
 function Dashboard() {
   const [s, setS] = useState<Summary | null>(null);
   useEffect(() => { api<Summary>('/admin/summary').then(setS).catch(() => {}); }, []);
   const stats: [string, number | undefined, string?][] = [
+    ['🆘 Open SOS', s?.sosOpen, '/safety'], ['Open incidents', s?.incidentsOpen, '/safety'], ['Strike appeals', s?.appealsOpen, '/appeals'], ['Dispute cases overdue', s?.casesOverdue, '/cases'],
     ['Businesses awaiting verification', s?.businessesPendingVerification, '/businesses'], ['New sites to check', s?.sitesPendingReview, '/businesses?status=verified'],
     ['Shifts in review', s?.shiftsPendingReview, '/shift-review'], ['Open fraud flags', s?.openFraudFlags, '/flags'],
     ['Payouts over 24 h', s?.payoutsOverdue, '/payouts'], ['Payouts held / failed', s?.payoutsHeld, '/payouts'],
@@ -30,7 +31,7 @@ function Dashboard() {
           </a>
         ))}
       </div>
-      <div className="panel">
+      <div className="panel" style={{ display: QUEUES.length ? undefined : 'none' }}>
         <h3 style={{ marginTop: 0 }}>Coming next</h3>
         <table><tbody>
           {QUEUES.map(([q, p]) => <tr key={q}><td>{q}</td><td className="muted">Arrives in {p}</td></tr>)}

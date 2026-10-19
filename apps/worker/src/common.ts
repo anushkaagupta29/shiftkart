@@ -12,6 +12,7 @@ export type Shift = {
   startsAt: string; endsAt: string; breakMinutes: number; slotsLeft: number; headcount: number; dressCode: string; bringItems: string;
   pay: { type: string; hourlyPaise: number; totalPaise: number; mealAllowancePaise: number; travelAllowancePaise: number; takeHomePaise: number };
   eligible: boolean; missing: string[]; myWaitlist: { id: string; status: string } | null;
+  isNight?: boolean; transportProvided?: boolean; businessId?: string; businessRating?: { score: number | null; count: number } | null;
 };
 export type Booking = { bookingId: string; bookingStatus: string; shift: Shift };
 export type Offer = { id: string; status: string; expiresAt: string | null; shiftId: string; title: string; startsAt: string };
@@ -21,7 +22,8 @@ export type Route =
   | { name: 'lang' } | { name: 'phone' } | { name: 'code'; phone: string } | { name: 'consent'; phone: string; code: string }
   | { name: 'setup' } | { name: 'digilocker'; sessionId: string } | { name: 'selfie' } | { name: 'payout' } | { name: 'profile' }
   | { name: 'home'; tab: Tab } | { name: 'shift'; id: string }
-  | { name: 'booking'; bookingId: string; shiftId: string } | { name: 'payslip'; id: string };
+  | { name: 'booking'; bookingId: string; shiftId: string } | { name: 'payslip'; id: string }
+  | { name: 'chat'; bookingId: string; shiftId: string; title: string } | { name: 'safety'; bookingId?: string } | { name: 'me' } | { name: 'dispute'; id: string };
 
 export type Tab = 'shifts' | 'mine' | 'offers' | 'earnings';
 

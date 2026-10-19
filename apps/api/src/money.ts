@@ -13,6 +13,9 @@ import { financialYear, gstSplit } from './domain/gst';
 import { istDate } from './time';
 import type { PayoutProvider } from './adapters/payouts';
 import type { SmsSender } from './adapters/sms';
+import { recordStrike } from './trust';
+import { velocityCheck } from './fraud-rules';
+import { caseEvent, openCase } from './cases';
 
 const PROVIDER = 'mockpay';
 // Placeholder seller details until the company is registered (LEGAL L-32, L-12).
@@ -68,6 +71,7 @@ export async function approveTimesheet(db: Db, t0: { id: string; businessId: str
       `UPDATE timesheets SET status = $2, approved_by = $3, approved_at = now() WHERE id = $1`,
       [t.id, auto ? 'auto_approved' : 'approved', auto ? null : by.userId],
     );
+    await tx.query('UPDATE worker_profiles SET completed_shifts = completed_shifts + 1 WHERE user_id = $1', [t.worker_id]);
     const f = feesFor(t);
     const r = await release(tx, t, Number(t.gross_paise), f.fee, f.gst, `approve:${t.id}`, 'wage');
     await writeAudit(tx, { actorType: auto ? 'system' : 'user', actorId: auto ? null : by.userId, action: auto ? 'timesheet.auto_approve' : 'timesheet.approve', targetType: 'timesheet', targetId: t.id, after: r ?? {}, ip });
@@ -100,6 +104,9 @@ export async function disputeTimesheet(db: Db, t0: { id: string; businessId: str
     const f = feesFor(t);
     const held = f.ofPay(disputedPay);
     const r = await release(tx, t, undisputedPay + Number(t.allowances_paise), Math.max(0, f.fee - held.fee), Math.max(0, f.gst - held.gst), `approve-undisputed:${t.id}`, 'wage');
+    // Every dispute becomes a case with a timeline both sides can follow and add to.
+    await openCase(tx, { kind: 'timesheet', bookingId: t.booking_id, timesheetId: t.id, openedBy: 'business', actorId: userId,
+      summary: `Business disputes ${input.minutes} min (${input.category.replaceAll('_', ' ')}): ${input.reason}. ₹${(disputedPay / 100).toFixed(2)} held; the rest was paid.` });
 
     const rate = (await tx.query(
       `SELECT count(*) FILTER (WHERE disputed_at IS NOT NULL)::int AS d, count(*)::int AS n FROM (
@@ -150,6 +157,12 @@ export async function resolveDispute(db: Db, timesheetId: string, staff: { staff
               resolution_approved_by = CASE WHEN resolved_by IS NOT NULL AND resolved_by <> $4 THEN $4 END, resolved_at = now() WHERE id = $1`,
       [t.id, minutes, reason, staff.staffId],
     );
+    const kase = (await tx.query('SELECT id FROM dispute_cases WHERE timesheet_id = $1', [t.id])).rows[0];
+    if (kase) {
+      await tx.query(`UPDATE dispute_cases SET status = 'decided', decision = $2, decision_reason = $3, decided_by = $4, decided_at = now() WHERE id = $1`,
+        [kase.id, `Worker paid for ${minutes} of ${t.disputed_minutes} disputed minutes`, reason, staff.staffId]);
+      await caseEvent(tx, kase.id, 'ops', staff.staffId, 'decision', `Decision: the worker is paid for ${minutes} of the ${t.disputed_minutes} disputed minutes (₹${(award / 100).toFixed(2)}). Reason: ${reason}`);
+    }
     if (award > 0) {
       const f = feesFor(t);
       const a = f.ofPay(award), held = f.ofPay(Number(t.disputed_paise));
@@ -298,7 +311,9 @@ async function createPayslip(tx: Tx, p: Record<string, any>, destination: string
 export async function settleShifts(db: Db, provider: PayoutProvider): Promise<number> {
   const pol = await getPolicies(db, ['settlement.no_show_after_min']);
   const due = await db.query(
-    `SELECT id FROM shifts WHERE status = 'live' AND settled_at IS NULL AND ends_at + make_interval(mins => $1) <= now() LIMIT 50`,
+    `SELECT id FROM shifts WHERE settled_at IS NULL AND (
+        (status = 'live' AND ends_at + make_interval(mins => $1) <= now()) OR status = 'cancelled' AND published_at IS NOT NULL)
+      LIMIT 50`,
     [pol['settlement.no_show_after_min']],
   );
   let n = 0;
@@ -309,8 +324,12 @@ export async function settleShifts(db: Db, provider: PayoutProvider): Promise<nu
 export async function settleShift(db: Db, provider: PayoutProvider, shiftId: string): Promise<boolean> {
   return withTx(db, async (tx) => {
     const s = (await tx.query('SELECT * FROM shifts WHERE id = $1 FOR UPDATE', [shiftId])).rows[0];
-    if (!s || s.settled_at || s.status !== 'live') return false;
-    await tx.query(`UPDATE bookings SET status = 'no_show' WHERE shift_id = $1 AND status = 'confirmed'`, [shiftId]); // strikes: Phase 4
+    if (!s || s.settled_at || !['live', 'cancelled'].includes(s.status)) return false;
+    if (s.status === 'live') {
+      // Never checked in, never cancelled: a no-show, with a strike (appealable).
+      const noShows = (await tx.query(`UPDATE bookings SET status = 'no_show' WHERE shift_id = $1 AND status = 'confirmed' RETURNING id, worker_id`, [shiftId])).rows;
+      for (const n of noShows) await recordStrike(tx, n.worker_id, n.id, 'no_show', null);
+    }
     const open = await tx.query(
       `SELECT (SELECT count(*) FROM bookings WHERE shift_id = $1 AND status = 'checked_in')
             + (SELECT count(*) FROM timesheets WHERE shift_id = $1 AND status IN ('awaiting_confirmation', 'pending_approval', 'partially_disputed', 'disputed'))
@@ -363,7 +382,8 @@ export async function settleShift(db: Db, provider: PayoutProvider, shiftId: str
          fee, split.cgst, split.sgst, split.igst, fee + split.total],
       );
     }
-    await tx.query(`UPDATE shifts SET status = 'completed', settled_at = now() WHERE id = $1`, [shiftId]);
+    await tx.query(`UPDATE shifts SET status = CASE WHEN status = 'live' THEN 'completed' ELSE status END, settled_at = now() WHERE id = $1`, [shiftId]);
+    await velocityCheck(tx, s);
     await writeAudit(tx, { actorType: 'system', action: 'shift.settled', targetType: 'shift', targetId: shiftId, after: { refunded: (await accountBalance(tx, shiftEscrow(shiftId))) === 0, feePaise: fee } });
     return true;
   });

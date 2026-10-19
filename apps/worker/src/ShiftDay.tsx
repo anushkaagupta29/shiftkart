@@ -4,6 +4,7 @@ import { View } from 'react-native';
 import { ApiError, api, istDay, istTime, loadPending, rupees, savePending } from './api';
 import { useBusy, type P, type Shift } from './common';
 import { Banner, Big, Card, Chip, Field, Screen, T } from './ui';
+import { AfterShiftCard } from './Trust';
 
 type Attendance = {
   bookingStatus: string; onBreak: boolean;
@@ -27,7 +28,8 @@ async function getFix(): Promise<Fix> {
   return { lat: p.coords.latitude, lng: p.coords.longitude, accuracyM: Math.round(p.coords.accuracy ?? 999), mocked: Boolean((p as { mocked?: boolean }).mocked) };
 }
 
-export function BookingScreen({ t, lang, go, setError, bookingId, shiftId }: P & { bookingId: string; shiftId: string }) {
+export function BookingScreen(props: P & { bookingId: string; shiftId: string }) {
+  const { t, lang, go, setError, bookingId, shiftId } = props;
   const [shift, setShift] = useState<Shift & { lat?: number; lng?: number } | null>(null);
   const [att, setAtt] = useState<Attendance | null>(null);
   const [code, setCode] = useState('');
@@ -99,6 +101,10 @@ export function BookingScreen({ t, lang, go, setError, bookingId, shiftId }: P &
       <T>🗓 {istDay(shift.startsAt, lang)}, {istTime(shift.startsAt, lang)} – {istTime(shift.endsAt, lang)}</T>
       <T muted>📍 {shift.siteName}, {shift.address}</T>
       {note ? <Banner kind="ok" text={note} /> : null}
+      <View style={{ flexDirection: 'row' }}>
+        <View style={{ flex: 1, marginRight: 4 }}><Big testID="open-chat" kind="secondary" icon="💬" label={t.chat} onPress={() => go({ name: 'chat', bookingId, shiftId, title: shift.title })} /></View>
+        <View style={{ flex: 1, marginLeft: 4 }}><Big testID="open-safety" kind={att.bookingStatus === 'checked_in' ? 'danger' : 'secondary'} icon="🛡️" label={att.bookingStatus === 'checked_in' ? 'SOS' : t.safety} onPress={() => go({ name: 'safety', bookingId })} /></View>
+      </View>
 
       {att.bookingStatus === 'confirmed' && codeEntry('check-in')}
 
@@ -132,6 +138,7 @@ export function BookingScreen({ t, lang, go, setError, bookingId, shiftId }: P &
           <Big kind="secondary" label={t.earnings} onPress={() => go({ name: 'home', tab: 'earnings' })} />
         </Card>
       )}
+      {['completed', 'turned_away'].includes(att.bookingStatus) && shift.businessId && <AfterShiftCard {...props} bookingId={bookingId} businessId={shift.businessId} />}
       <Banner text={t.noFees} />
     </Screen>
   );

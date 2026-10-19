@@ -8,6 +8,8 @@ import { badRequest, conflict, forbidden, notFound } from '../lib/errors';
 import { staffActor } from '../auth/guard';
 import { recomputeWorkerVerification } from '../worker-status';
 import { istDate } from '../time';
+import { cancelLiveShift } from '../trust';
+import { maybeSampleForRereview, recordStaffRead } from '../fraud-rules';
 
 export const OPS_ACCESS = {
   viewBusinesses: ['ops_verifier', 'ops_support', 'compliance'],
@@ -28,7 +30,7 @@ const roles = (k: keyof typeof OPS_ACCESS) => ({ auth: { staff: [...OPS_ACCESS[k
 const Decision = z.object({ decision: z.enum(['approve', 'reject']), reason: reasonField }).strict();
 const BizList = pagination.extend({ status: z.enum(['draft', 'pending', 'verified', 'rejected', 'suspended']).optional() }).strict();
 
-export async function adminOpsRoutes(app: FastifyInstance, { db }: AppDeps) {
+export async function adminOpsRoutes(app: FastifyInstance, { db, payouts, sms, config }: AppDeps) {
   // ---------------------------------------------------------------- businesses
 
   app.get('/admin/businesses', { config: roles('viewBusinesses') }, async (req) => {
@@ -53,6 +55,7 @@ export async function adminOpsRoutes(app: FastifyInstance, { db }: AppDeps) {
     const { businessId } = parse(uuidParam('businessId'), req.params);
     const b = (await db.query('SELECT * FROM businesses WHERE id = $1', [businessId])).rows[0];
     if (!b) throw notFound();
+    await recordStaffRead(db, staffActor(req).staffId, `business:${businessId}`);
     const [sites, reviews, flags, members] = await Promise.all([
       db.query(`SELECT id, name, address, city_code, geofence_m, status, status_reason, ST_Y(location::geometry) AS lat, ST_X(location::geometry) AS lng FROM sites WHERE business_id = $1 ORDER BY created_at`, [businessId]),
       db.query(`SELECT rv.*, su.email FROM business_reviews rv JOIN staff_users su ON su.id = rv.staff_id WHERE business_id = $1 ORDER BY rv.created_at`, [businessId]),
@@ -98,6 +101,7 @@ export async function adminOpsRoutes(app: FastifyInstance, { db }: AppDeps) {
         );
         if (status === 'verified') {
           await tx.query(`UPDATE sites SET status = 'active', verified_by = $2 WHERE business_id = $1 AND status = 'pending_verify'`, [businessId, s.staffId]);
+          await maybeSampleForRereview(tx, businessId, s.staffId);
         }
       }
       await writeAudit(tx, { actorType: 'staff', actorId: s.staffId, actorRoles: s.roles, action: `business.review_${decision}`, targetType: 'business', targetId: businessId, reason, before: { status: b.verification_status }, after: { status }, ip: req.ip });
@@ -127,12 +131,22 @@ export async function adminOpsRoutes(app: FastifyInstance, { db }: AppDeps) {
       const s = staffActor(req);
       const { siteId } = parse(uuidParam('siteId'), req.params);
       const { reason } = parse(z.object({ reason: reasonField }).strict(), req.body);
-      return withTx(db, async (tx) => {
+      const res = await withTx(db, async (tx) => {
         const r = await tx.query(`UPDATE sites SET status = $2, status_reason = $3 WHERE id = $1 AND status = $4 RETURNING id`, [siteId, to, reason, from]);
         if (!r.rowCount) throw conflict('bad_state', `Site is not ${from}.`);
         await writeAudit(tx, { actorType: 'staff', actorId: s.staffId, actorRoles: s.roles, action: `site.${action}`, targetType: 'site', targetId: siteId, reason, ip: req.ip });
         return { status: to };
       });
+      // SAF-04: upcoming shifts at a paused site are cancelled; booked workers are compensated from escrow.
+      let cancelled = 0;
+      if (action === 'pause') {
+        const upcoming = await db.query(`SELECT id FROM shifts WHERE site_id = $1 AND status = 'live' AND starts_at > now()`, [siteId]);
+        for (const u of upcoming.rows) {
+          await cancelLiveShift(db, payouts, u.id, { kind: 'site_paused', staffId: s.staffId }, `Site paused for safety review: ${reason}`, { sms, dataKey: config.dataKey }, req.ip);
+          cancelled += 1;
+        }
+      }
+      return { ...res, shiftsCancelled: cancelled };
     });
   }
 

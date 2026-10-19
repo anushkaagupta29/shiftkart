@@ -30,7 +30,7 @@ export async function devRoutes(app: FastifyInstance, { db, config, sms, payouts
    */
   app.post('/dev/shifts/:shiftId/start-now', { config: { auth: { public: true } } }, async (req) => {
     const { shiftId } = parse(z.object({ shiftId: z.string().uuid() }).strict(), req.params);
-    const { minutes } = parse(z.object({ minutes: z.number().int().min(-720).max(720).default(-5) }).strict(), req.body);
+    const { minutes } = parse(z.object({ minutes: z.number().int().min(-10_080).max(10_080).default(-5) }).strict(), req.body);
     const r = await db.query(
       `WITH s AS (SELECT id, starts_at FROM shifts WHERE id = $1 AND status = 'live')
        UPDATE shifts SET starts_at = now() + make_interval(mins => $2), ends_at = now() + make_interval(mins => $2) + (ends_at - starts_at)

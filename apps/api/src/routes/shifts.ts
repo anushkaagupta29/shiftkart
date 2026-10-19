@@ -5,6 +5,7 @@ import type { Queryable } from '../db';
 import { withTx } from '../db';
 import { writeAudit } from '../audit';
 import { getPolicies, getPolicy } from '../policy';
+import { cancelLiveShift } from '../trust';
 import { parse } from '../lib/validate';
 import { HttpError, badRequest, conflict, forbidden, notFound } from '../lib/errors';
 import { userActor } from '../auth/guard';
@@ -41,6 +42,8 @@ export const ShiftInput = z.object({
   dressCode: z.string().trim().max(300).default(''),
   bringItems: z.string().trim().max(300).default(''),
   onsiteContactMemberId: z.string().uuid().optional(),
+  // Night shifts (state rules, SPEC §6.10): the business confirms safe transport home.
+  nightTransportAttested: z.boolean().default(false),
   genderRequirement: z.object({
     requirement: z.enum(['female', 'male']),
     legalReason: z.string().trim().min(20, 'Explain the legal reason in at least 20 characters').max(1000),
@@ -94,11 +97,24 @@ async function evaluateShift(db: Queryable, businessId: string, body: ShiftInput
   const feeBp = pol['fee.platform_bp'], gstBp = pol['tax.gst_on_fee_bp'];
   const cost = computeShiftCost({ ...body, startsAt, endsAt, feeBp, gstBp });
 
+  // Night window from state rules (falls back to the national default).
+  const nightPol = await getPolicies(db, ['night.start_min', 'night.end_min', 'night.transport_required'], `state:${site.state_code}`);
+  const istMin = (d: Date) => { const x = new Date(d.getTime() + 330 * 60_000); return x.getUTCHours() * 60 + x.getUTCMinutes(); };
+  const sMin = istMin(startsAt), eMin = istMin(endsAt);
+  const crossesMidnight = endsAt.getTime() - startsAt.getTime() >= 24 * 3600_000 - 1 || eMin <= sMin;
+  const inNight = (m: number) => m >= nightPol['night.start_min'] || m < nightPol['night.end_min'];
+  const isNight = crossesMidnight || inNight(sMin) || inNight((eMin + 1439) % 1440);
+  if (isNight && nightPol['night.transport_required'] && !body.nightTransportAttested) {
+    throw badRequest('night_transport_required', 'This shift runs at night. Confirm you will arrange safe transport home for workers.');
+  }
+
   const reviewReasons: string[] = screenText(body.title, body.description, body.dressCode, body.bringItems);
+  const lateCancelFlag = await db.query(`SELECT 1 FROM fraud_flags WHERE subject_type = 'business' AND subject_id = $1 AND rule_code = 'late_cancel_pattern' AND status = 'open'`, [businessId]);
+  if (lateCancelFlag.rowCount) reviewReasons.push('late_cancel_pattern');
   if (role.hazard_level === 'high') reviewReasons.push('high_hazard_role');
   if (body.genderRequirement) reviewReasons.push('gender_requirement');
 
-  return { startsAt, endsAt, site, role, category, rate, minHourly, cost, reviewReasons };
+  return { startsAt, endsAt, site, role, category, rate, minHourly, cost, reviewReasons, isNight };
 }
 
 async function checkNewBusinessLimits(db: Queryable, businessId: string, headcount: number, totalPaise: number) {
@@ -125,7 +141,7 @@ function shiftView(s: Record<string, any>) {
   };
 }
 
-export async function shiftRoutes(app: FastifyInstance, { db }: AppDeps) {
+export async function shiftRoutes(app: FastifyInstance, { db, payouts, sms, config }: AppDeps) {
   const ensureCanPost = async (q: Queryable, businessId: string, userId: string) => {
     await requireMember(q, businessId, userId, ['owner', 'manager']);
     const b = (await q.query('SELECT verification_status FROM businesses WHERE id = $1', [businessId])).rows[0];
@@ -139,7 +155,7 @@ export async function shiftRoutes(app: FastifyInstance, { db }: AppDeps) {
     const body = parse(ShiftInput, req.body);
     await ensureCanPost(db, businessId, a.userId);
     const e = await evaluateShift(db, businessId, body);
-    return { cost: e.cost, wageCategory: e.category, minHourlyPaise: e.minHourly, needsReview: e.reviewReasons };
+    return { cost: e.cost, wageCategory: e.category, minHourlyPaise: e.minHourly, needsReview: e.reviewReasons, isNight: e.isNight };
   });
 
   app.post('/businesses/:businessId/shifts', { config: bizAuth }, async (req, reply) => {
@@ -158,12 +174,12 @@ export async function shiftRoutes(app: FastifyInstance, { db }: AppDeps) {
       const s = (await tx.query(
         `INSERT INTO shifts (business_id, site_id, role_code, title, description, starts_at, ends_at, break_minutes, headcount,
             pay_type, pay_paise, meal_allowance_paise, travel_allowance_paise, requirements, dress_code, bring_items,
-            onsite_contact_member_id, wage_category, min_wage_rate_id, cost, total_paise, status, review_reasons, created_by)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24) RETURNING *`,
+            onsite_contact_member_id, wage_category, min_wage_rate_id, cost, total_paise, status, review_reasons, created_by, is_night, night_transport_attested)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26) RETURNING *`,
         [businessId, body.siteId, body.roleCode, body.title, body.description, e.startsAt, e.endsAt, body.breakMinutes, body.headcount,
          body.payType, body.payPaise, body.mealAllowancePaise, body.travelAllowancePaise, JSON.stringify(body.requirements),
          body.dressCode, body.bringItems, body.onsiteContactMemberId ?? null, e.category, e.rate.id, JSON.stringify(e.cost),
-         e.cost.totalPaise, status, e.reviewReasons, a.userId],
+         e.cost.totalPaise, status, e.reviewReasons, a.userId, e.isNight, body.nightTransportAttested],
       )).rows[0];
       if (body.genderRequirement) {
         await tx.query(
@@ -216,21 +232,40 @@ export async function shiftRoutes(app: FastifyInstance, { db }: AppDeps) {
     };
   });
 
-  // Unfunded shifts can be withdrawn freely. Cancelling a funded shift (with worker compensation) is Phase 4.
+  /**
+   * Withdraw an unfunded shift (free), or cancel a live one: booked workers are compensated
+   * automatically from escrow by how late it is, and the rest is refunded (SPEC §6.7).
+   */
   app.post('/businesses/:businessId/shifts/:shiftId/cancel', { config: bizAuth }, async (req) => {
     const a = userActor(req);
     const { businessId, shiftId } = parse(ShiftParams, req.params);
     const { reason } = parse(z.object({ reason: z.string().trim().min(3).max(300) }).strict(), req.body);
-    await withTx(db, async (tx) => {
-      await requireMember(tx, businessId, a.userId, ['owner', 'manager']);
+    await requireMember(db, businessId, a.userId, ['owner', 'manager']);
+    const unfunded = await withTx(db, async (tx) => {
       const r = await tx.query(
-        `UPDATE shifts SET status = 'cancelled', cancelled_at = now(), cancel_reason = $3
+        `UPDATE shifts SET status = 'cancelled', cancelled_at = now(), cancel_reason = $3, cancelled_by = 'business'
           WHERE id = $1 AND business_id = $2 AND status IN ('pending_review', 'pending_funding') RETURNING id`,
         [shiftId, businessId, reason],
       );
-      if (!r.rowCount) throw conflict('not_cancellable', 'Funded shifts can be cancelled once cancellation rules launch (Phase 4).');
-      await writeAudit(tx, { actorType: 'user', actorId: a.userId, action: 'shift.cancel_unfunded', targetType: 'shift', targetId: shiftId, reason, ip: req.ip });
+      if (r.rowCount) await writeAudit(tx, { actorType: 'user', actorId: a.userId, action: 'shift.cancel_unfunded', targetType: 'shift', targetId: shiftId, reason, ip: req.ip });
+      return Boolean(r.rowCount);
     });
-    return { ok: true };
+    if (unfunded) return { ok: true, compensationPaise: 0 };
+    const r = await cancelLiveShift(db, payouts, shiftId, { kind: 'business', userId: a.userId, businessId }, reason, { sms, dataKey: config.dataKey }, req.ip);
+    return { ok: true, ...r };
+  });
+
+  /** What cancelling now would cost, shown before the business confirms. */
+  app.get('/businesses/:businessId/shifts/:shiftId/cancel-preview', { config: bizAuth }, async (req) => {
+    const a = userActor(req);
+    const { businessId, shiftId } = parse(ShiftParams, req.params);
+    await requireMember(db, businessId, a.userId);
+    const s = (await db.query('SELECT * FROM shifts WHERE id = $1 AND business_id = $2', [shiftId, businessId])).rows[0];
+    if (!s) throw notFound();
+    const hoursBefore = (s.starts_at.getTime() - Date.now()) / 3600_000;
+    const windows = (await getPolicy<{ beforeHours: number; workerCompBp: number }[]>(db, 'cancel.business.windows')).slice().sort((x, y) => y.beforeHours - x.beforeHours);
+    const w = windows.find((x) => hoursBefore >= x.beforeHours) ?? windows[windows.length - 1]!;
+    const booked = (await db.query(`SELECT count(*) FILTER (WHERE status = 'confirmed')::int AS c, count(*) FILTER (WHERE status = 'checked_in')::int AS i FROM bookings WHERE shift_id = $1`, [shiftId])).rows[0];
+    return { hoursBefore: Math.round(hoursBefore * 10) / 10, compensationPercent: w.workerCompBp / 100, bookedWorkers: booked.c, checkedIn: booked.i, perWorkerPayPaise: Number(s.cost.perWorkerPayPaise) };
   });
 }

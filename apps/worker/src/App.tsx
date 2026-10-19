@@ -5,6 +5,7 @@ import { ApiError, api, clearSession, deviceId, flushPending, istDay, istTime, l
 import { STRINGS, type Lang, type T as Strings } from './i18n';
 import { showError, useBusy, type Booking, type Me, type Offer, type P, type Ref, type Route, type Shift, type Tab } from './common';
 import { BookingScreen, EarningsTab, PayslipScreen, PendingConfirmations } from './ShiftDay';
+import { ChatScreen, DisputeScreen, HireOffers, MeScreen, SafetyScreen } from './Trust';
 import { Banner, Big, Card, Chip, Field, Screen, T, useColors } from './ui';
 
 const LANG_NAMES: Record<string, string> = { hi: 'हिंदी', en: 'English', kn: 'ಕನ್ನಡ', ta: 'தமிழ்', te: 'తెలుగు', mr: 'मराठी', bn: 'বাংলা', ur: 'اردو', ml: 'മലയാളം' };
@@ -50,6 +51,10 @@ export default function App() {
       {route.name === 'shift' && <ShiftScreen {...props} id={route.id} />}
       {route.name === 'booking' && <BookingScreen {...props} bookingId={route.bookingId} shiftId={route.shiftId} />}
       {route.name === 'payslip' && <PayslipScreen {...props} id={route.id} />}
+      {route.name === 'chat' && <ChatScreen {...props} bookingId={route.bookingId} shiftId={route.shiftId} title={route.title} />}
+      {route.name === 'safety' && <SafetyScreen {...props} bookingId={route.bookingId} />}
+      {route.name === 'me' && <MeScreen {...props} />}
+      {route.name === 'dispute' && <DisputeScreen {...props} id={route.id} />}
     </View>
   );
 }
@@ -298,7 +303,10 @@ function HomeScreen(props: P & { tab: Tab }) {
           </View>
         ))}
       </View>
-      <Big kind="secondary" label={`↻ ${t.refresh}`} busy={busy} onPress={load} />
+      <View style={{ flexDirection: 'row' }}>
+        <View style={{ flex: 1, marginRight: 4 }}><Big kind="secondary" label={`↻ ${t.refresh}`} busy={busy} onPress={load} /></View>
+        <View style={{ flex: 1, marginLeft: 4 }}><Big testID="me" kind="secondary" label={`👤 ${t.me}`} onPress={() => go({ name: 'me' })} /></View>
+      </View>
       {offered.length > 0 && tab !== 'offers' && <Banner kind="ok" text={`🔔 ${t.offerTitle}`} />}
       {saved > 0 && <Big kind="secondary" label={`📶 ${t.sendSaved} (${saved})`} busy={busy} onPress={load} />}
       <PendingConfirmations {...props} />
@@ -313,18 +321,20 @@ function HomeScreen(props: P & { tab: Tab }) {
           <T size={19} bold>{s.title}</T>
           <T>🗓 {istDay(s.startsAt, lang)}  ⏰ {istTime(s.startsAt, lang)} – {istTime(s.endsAt, lang)}</T>
           <T>📍 {s.siteName}{s.distanceKm != null ? ` · ${s.distanceKm} ${t.km}` : ''}</T>
-          <T muted>👥 {s.slotsLeft > 0 ? `${s.slotsLeft} ${t.slotsLeft}` : t.full} · {s.businessName}</T>
+          <T muted>👥 {s.slotsLeft > 0 ? `${s.slotsLeft} ${t.slotsLeft}` : t.full} · {s.businessName}{s.businessRating?.score ? ` · ⭐ ${s.businessRating.score} (${s.businessRating.count})` : ''}</T>
+          {s.isNight && <T muted>🌙 {t.nightShift}{s.transportProvided ? ` · 🚐 ${t.transportYes}` : ''}</T>}
         </Card>
       )))}
 
       {tab === 'mine' && bookings?.map((b) => (
-        <Card key={b.bookingId} testID={`booking-${b.bookingId}`} onPress={() => go(['confirmed', 'checked_in', 'completed'].includes(b.bookingStatus) ? { name: 'booking', bookingId: b.bookingId, shiftId: b.shift.id } : { name: 'shift', id: b.shift.id })}>
+        <Card key={b.bookingId} testID={`booking-${b.bookingId}`} onPress={() => go(['confirmed', 'checked_in', 'completed', 'turned_away'].includes(b.bookingStatus) ? { name: 'booking', bookingId: b.bookingId, shiftId: b.shift.id } : { name: 'shift', id: b.shift.id })}>
           <T size={19} bold>{b.shift.title}</T>
           <T>🗓 {istDay(b.shift.startsAt, lang)}  ⏰ {istTime(b.shift.startsAt, lang)}</T>
           <T muted>{b.bookingStatus === 'confirmed' ? `✓ ${t.booked}` : b.bookingStatus.startsWith('cancelled') ? t.cancelled : b.bookingStatus}</T>
         </Card>
       ))}
 
+      {tab === 'offers' && <HireOffers {...props} />}
       {tab === 'offers' && offers.map((o) => (
         <Card key={o.id}>
           <T size={19} bold>{o.title}</T>
@@ -347,6 +357,8 @@ function ShiftScreen({ t, lang, go, setError, id }: P & { id: string }) {
   const [s, setS] = useState<Shift | null>(null);
   const [booking, setBooking] = useState<Booking | null>(null);
   const [done, setDone] = useState('');
+  const [nightOk, setNightOk] = useState(false);
+  const [emergency, setEmergency] = useState<string | null>(null);
   const { busy, run } = useBusy(setError);
   const load = useCallback(async () => {
     setS(await api<Shift>(`/worker/shifts/${id}`));
@@ -356,7 +368,7 @@ function ShiftScreen({ t, lang, go, setError, id }: P & { id: string }) {
   useEffect(() => { load().catch((e) => setError(showError(e))); }, [load, setError]);
   if (!s) return <Screen onBack={() => go({ name: 'home', tab: 'shifts' })} backLabel={t.back}><T>…</T></Screen>;
   const cancel = () => {
-    const doIt = () => run(async () => { await api(`/worker/bookings/${booking!.bookingId}/cancel`, { method: 'POST' }); await load(); });
+    const doIt = () => run(async () => { await api(`/worker/bookings/${booking!.bookingId}/cancel`, { method: 'POST', body: {} }); await load(); });
     if (Platform.OS === 'web') { if (globalThis.confirm?.(t.confirmCancel) ?? true) doIt(); }
     else Alert.alert(t.cancel, t.confirmCancel, [{ text: t.back }, { text: t.cancel, style: 'destructive', onPress: doIt }]);
   };
@@ -382,11 +394,26 @@ function ShiftScreen({ t, lang, go, setError, id }: P & { id: string }) {
           <Banner kind="ok" text={`✓ ${t.booked}`} />
           <Big testID="go-to-shift" label={t.goToShift} icon="📍" onPress={() => go({ name: 'booking', bookingId: booking.bookingId, shiftId: id })} />
           <Big kind="danger" label={t.cancel} busy={busy} onPress={cancel} />
+          {emergency === null ? <Big kind="secondary" label={`🚑 ${t.emergencyCancel}`} onPress={() => setEmergency('')} /> : (
+            <Card>
+              <Field label={t.emergencyReason} value={emergency} onChangeText={setEmergency} multiline style={{ fontSize: 17, minHeight: 50 }} />
+              <Big kind="danger" label={t.emergencyCancel} busy={busy} disabled={emergency.trim().length < 5} onPress={() => run(async () => { await api(`/worker/bookings/${booking.bookingId}/cancel`, { method: 'POST', body: { emergency: { reason: emergency } } }); setEmergency(null); await load(); })} />
+            </Card>
+          )}
         </>
       ) : !s.eligible ? (
         <Banner text={`${t.notEligible}. ${t.needs}: ${s.missing.join(', ')}`} />
       ) : s.slotsLeft > 0 ? (
-        <Big testID="accept" label={t.accept} icon="✅" busy={busy} onPress={() => run(async () => { await api(`/worker/shifts/${id}/accept`, { method: 'POST' }); setDone(t.accepted); await load(); })} />
+        <>
+          {s.isNight && (
+            <Card>
+              <T bold>🌙 {t.nightShift}</T>
+              {s.transportProvided && <T>🚐 {t.transportYes}</T>}
+              <Chip testID="night-consent" label={t.nightConsent} on={nightOk} onPress={() => setNightOk(!nightOk)} />
+            </Card>
+          )}
+          <Big testID="accept" label={t.accept} icon="✅" busy={busy} disabled={Boolean(s.isNight) && !nightOk} onPress={() => run(async () => { await api(`/worker/shifts/${id}/accept`, { method: 'POST', body: s.isNight ? { nightConsent: true } : {} }); setDone(t.accepted); await load(); })} />
+        </>
       ) : s.myWaitlist ? (
         <Big kind="secondary" label={t.leaveWaitlist} busy={busy} onPress={() => run(async () => { await api(`/worker/shifts/${id}/waitlist`, { method: 'DELETE' }); await load(); })} />
       ) : (

@@ -9,6 +9,7 @@ import { badRequest, conflict, forbidden, notFound } from '../lib/errors';
 import { STAFF_COOKIE, staffActor } from '../auth/guard';
 import { STAFF_SESSION_HOURS, staffLogin } from '../auth/staff';
 import { revokeAllForUser } from '../auth/sessions';
+import { recordStaffRead } from '../fraud-rules';
 
 // Who can do what (docs/SPEC.md §4). Kept in one place so the RBAC tests can read it.
 export const ADMIN_ACCESS = {
@@ -86,13 +87,18 @@ export async function adminRoutes(app: FastifyInstance, { db, config }: AppDeps)
              (SELECT count(*) FROM payouts WHERE status NOT IN ('paid', 'rejected', 'pending_approval', 'reversed') AND approved_at < now() - interval '24 hours') AS payouts_overdue,
              (SELECT count(*) FROM payouts WHERE status IN ('held', 'failed')) AS payouts_held,
              (SELECT count(*) FROM timesheets WHERE status IN ('disputed', 'partially_disputed')) AS disputes_open,
-             (SELECT count(*) FROM reconciliation_runs WHERE status = 'mismatch' AND created_at > now() - interval '7 days') AS recon_mismatch`);
+             (SELECT count(*) FROM reconciliation_runs WHERE status = 'mismatch' AND created_at > now() - interval '7 days') AS recon_mismatch,
+             (SELECT count(*) FROM sos_events WHERE status <> 'resolved') AS sos_open,
+             (SELECT count(*) FROM incidents WHERE status <> 'closed') AS incidents_open,
+             (SELECT count(*) FROM strikes WHERE status = 'appealed') AS appeals_open,
+             (SELECT count(*) FROM dispute_cases WHERE status IN ('open', 'under_review') AND decide_due_at < now()) AS cases_overdue`);
     const c = r.rows[0];
     return {
       workers: c.workers, verifiedWorkers: c.verified_workers, businessUsers: c.business_users, businesses: c.businesses,
       businessesPendingVerification: c.businesses_pending, suspendedUsers: c.suspended_users,
       shiftsPendingReview: c.shifts_review, liveShifts: c.shifts_live, openFraudFlags: c.open_flags, sitesPendingReview: c.sites_review,
       payoutsOverdue: c.payouts_overdue, payoutsHeld: c.payouts_held, disputesOpen: c.disputes_open, reconciliationMismatches: c.recon_mismatch,
+      sosOpen: c.sos_open, incidentsOpen: c.incidents_open, appealsOpen: c.appeals_open, casesOverdue: c.cases_overdue,
     };
   });
 
@@ -122,6 +128,7 @@ export async function adminRoutes(app: FastifyInstance, { db, config }: AppDeps)
     const { userId } = parse(uuidParam('userId'), req.params);
     const u = (await db.query('SELECT * FROM users WHERE id = $1', [userId])).rows[0];
     if (!u) throw notFound();
+    await recordStaffRead(db, staffActor(req).staffId, `user:${userId}`);
     const memberships = await db.query(
       `SELECT b.id, b.legal_name, m.role FROM business_members m JOIN businesses b ON b.id = m.business_id
         WHERE m.user_id = $1 AND m.removed_at IS NULL`, [userId]);

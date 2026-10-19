@@ -20,7 +20,7 @@ export function Shell({ children, businessId }: { children: React.ReactNode; bus
   if (!me) return <div className="page muted">Loading…</div>;
 
   const links = businessId
-    ? [[`/b/${businessId}`, 'Overview'], [`/b/${businessId}/shifts`, 'Shifts'], [`/b/${businessId}/timesheets`, 'Timesheets'], [`/b/${businessId}/invoices`, 'Invoices'], [`/b/${businessId}/sites`, 'Sites'], [`/b/${businessId}/team`, 'Team']]
+    ? [[`/b/${businessId}`, 'Overview'], [`/b/${businessId}/shifts`, 'Shifts'], [`/b/${businessId}/timesheets`, 'Timesheets'], [`/b/${businessId}/invoices`, 'Invoices'], [`/b/${businessId}/disputes`, 'Disputes'], [`/b/${businessId}/hires`, 'Hires'], [`/b/${businessId}/report`, 'Report a problem'], [`/b/${businessId}/sites`, 'Sites'], [`/b/${businessId}/team`, 'Team']]
     : [];
   const logout = async () => { await api('/auth/logout', { method: 'POST', body: {} }).catch(() => {}); router.replace('/login'); };
   return (

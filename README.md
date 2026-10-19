@@ -1,7 +1,7 @@
 # ShiftKart
 
 Short-shift staffing for India: businesses post pre-funded shifts, verified workers pick them,
-check in on site, and get paid within a day. **Status: Phase 3 (the shift itself) done.** Everything runs
+check in on site, and get paid within a day. **Status: Phase 4 (trust layer) done.** Everything runs
 on your laptop. Nothing talks to a real SMS, payment, bank or KYC service: those are all mocks.
 
 - Product spec: [docs/SPEC.md](docs/SPEC.md)
@@ -113,12 +113,25 @@ curl -s -X POST localhost:4000/dev/shifts/<shift-id>/start-now -H 'content-type:
 - Payouts run every 15 seconds (or `curl -X POST localhost:4000/dev/jobs/run`). The worker's **Earnings** tab shows the payslip.
 - Two hours after a shift ends it closes: unused money goes back to the business and a GST invoice appears under **Invoices**.
 
-**4. Review as ops** (http://localhost:3001)
+**4. Trust and safety**
+- **Chat**: business app → shift → roster → **Chat**; worker app → booking → 💬. Try "send 500 rs fee on gpay" or a
+  link: it's blocked and the worker sees a warning. Phone numbers are masked. **Call** gives a masked-number bridge (mock).
+- **Cancel a live shift** from the business app: it shows what workers will get first (by how late it is), then pays them from the escrow.
+- **Worker cancels late** (less than 12 h before): a strike. **🚑 Emergency** cancels are excused twice in 90 days.
+  Worker app → **👤 Me** shows points, rating, strikes (with **Appeal**) and disputes.
+- **Safety**: worker app → booking → 🛡️ (shows **SOS** while on shift). Set a trusted contact to send them a live-location link.
+  Reports can be anonymous. Admin → **Safety desk**.
+- **Night shifts** (after 20:00): the business must promise transport; each worker agrees before booking.
+- **Ratings** after a shift, both ways, hidden until both sides rate. **Offer full-time job** from the roster:
+  the worker can say no; contact details unlock only after they say yes and the business pays the fee.
+
+**5. Review as ops** (http://localhost:3001)
 - **verifier@** approves businesses and new sites; **compliance@** handles shift review (gender requirements),
   minimum wage rates and policy changes, both of which need a second compliance officer; **safety@** can pause a site.
 - A shift posted with words like "registration fee", "fair skin", "only girls" or "aadhaar copy" goes to **Shift review** instead of going live.
 - **finance@** sees held/failed payouts, approves manual payouts (a second finance login must approve), and runs **Reconciliation**.
-- **disputes@** decides disputed timesheet minutes, with the attendance evidence on screen.
+- **disputes@** decides disputed timesheet minutes and other dispute cases (with attendance and chat evidence), and strike appeals.
+- **safety@** runs the **Safety desk** (SOS, incidents) and can pause a site, which cancels its upcoming shifts with compensation.
 
 Local login codes: each network can request 10 codes an hour (a real anti-abuse rule). If you hit it while testing,
 wait an hour or run `npm run db:reset`.
@@ -159,7 +172,7 @@ Runs unit tests (money, minimum wage, phone, crypto, 2FA) and API tests against 
 (`shiftkart_test`), including the 200-people-tap-at-once booking test. Abuse-case tests live in
 `apps/api/test/abuse/`. [docs/ABUSE_CASES.md](docs/ABUSE_CASES.md) maps each case to its test.
 
-End-to-end browser tests (business signup to live shift; worker signup in Hindi on a phone-sized screen; and a full shift day across both apps):
+End-to-end browser tests (business signup to live shift; worker signup in Hindi on a phone-sized screen; a full shift day; and a trust journey across all three apps):
 
 ```bash
 npm run test:e2e

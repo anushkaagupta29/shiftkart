@@ -8,7 +8,7 @@ import { api, errText, istToIso, rupees, toPaise } from '../../../../lib/api';
 type Ref = { roles: { code: string; name: { en: string }; wageCategory: string; skills: string[] }[]; skills: { code: string; name: { en: string } }[]; languages: string[] };
 type Site = { id: string; name: string; status: string };
 type Cost = { paidMinutes: number; perWorkerPayPaise: number; effectiveHourlyPaise: number; workerPayTotalPaise: number; allowancesTotalPaise: number; feePaise: number; gstOnFeePaise: number; totalPaise: number; feeBp: number; gstBp: number };
-type Preview = { cost: Cost; wageCategory: string; minHourlyPaise: number; needsReview: string[] };
+type Preview = { cost: Cost; wageCategory: string; minHourlyPaise: number; needsReview: string[]; isNight?: boolean };
 
 const LANG_NAMES: Record<string, string> = { en: 'English', hi: 'Hindi', kn: 'Kannada', ta: 'Tamil', te: 'Telugu', ml: 'Malayalam', mr: 'Marathi', bn: 'Bengali', ur: 'Urdu' };
 const tomorrow = () => new Date(Date.now() + 330 * 60_000 + 86400_000).toISOString().slice(0, 10);
@@ -21,7 +21,7 @@ function NewShift() {
   const [f, setF] = useState({
     siteId: '', roleCode: 'warehouse_packing', title: '', description: '', date: tomorrow(), start: '09:00', end: '17:00', breakMinutes: '30',
     headcount: '5', payType: 'hourly', pay: '100', meal: '0', travel: '0', dressCode: '', bringItems: '',
-    skills: [] as string[], languages: [] as string[], twoWheeler: false,
+    skills: [] as string[], languages: [] as string[], twoWheeler: false, nightTransport: false,
   });
   const [preview, setPreview] = useState<Preview | null>(null);
   const [pErr, setPErr] = useState('');
@@ -41,6 +41,7 @@ function NewShift() {
       headcount: Number(f.headcount) || 0, payType: f.payType, payPaise: toPaise(f.pay) ?? 0,
       mealAllowancePaise: toPaise(f.meal) ?? 0, travelAllowancePaise: toPaise(f.travel) ?? 0,
       requirements: { skills: f.skills, languages: f.languages, twoWheeler: f.twoWheeler }, dressCode: f.dressCode, bringItems: f.bringItems,
+      nightTransportAttested: f.nightTransport,
     };
   }, [f]);
 
@@ -91,6 +92,12 @@ function NewShift() {
         <div className="field" style={{ marginTop: 10 }}><label>Speaks any of</label><div className="chips">{ref?.languages.map((l) => (
           <button type="button" key={l} className={`chip ${f.languages.includes(l) ? 'on' : ''}`} onClick={() => toggle('languages', l)}>{LANG_NAMES[l]}</button>))}</div></div>
         <label className="row" style={{ marginTop: 10 }}><input type="checkbox" checked={f.twoWheeler} onChange={(e) => setF({ ...f, twoWheeler: e.target.checked })} /> Needs own two-wheeler</label>
+        {(preview?.isNight || pErr.includes('night')) && (
+          <div className="note" style={{ marginTop: 10 }}>
+            <b>Night shift.</b> State rules need safe transport home for workers on shifts at night. Each worker will also be asked to agree to the timing.
+            <label className="row" style={{ marginTop: 6 }}><input type="checkbox" checked={f.nightTransport} onChange={(e) => setF({ ...f, nightTransport: e.target.checked })} /> I will arrange safe transport home for every worker</label>
+          </div>
+        )}
       </div>
       <div className="panel">
         <h3 style={{ marginTop: 0 }}>Total cost</h3>

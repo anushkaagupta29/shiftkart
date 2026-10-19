@@ -4,6 +4,8 @@ import type { PayoutProvider } from './adapters/payouts';
 import { sweepExpiredOffers } from './booking';
 import { autoApproveDue, processPayouts, reconcile, settleShifts } from './money';
 import { istDate } from './time';
+import { revealDueRatings } from './community';
+import { disputeSlaCheck } from './cases';
 
 export type JobDeps = { db: Db; sms: SmsSender; payouts: PayoutProvider; dataKey: string };
 
@@ -17,6 +19,8 @@ export async function runJobsOnce(d: JobDeps) {
     autoApproved: await autoApproveDue(d.db),
     payoutsPaid: await processPayouts(d.db, d.payouts, d.dataKey, d.sms),
     shiftsSettled: await settleShifts(d.db, d.payouts),
+    ratingsRevealed: await revealDueRatings(d.db),
+    disputesOverdue: await disputeSlaCheck(d.db),
   };
 }
 

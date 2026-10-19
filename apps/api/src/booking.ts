@@ -4,6 +4,8 @@ import { withTx } from './db';
 import type { SmsSender } from './adapters/sms';
 import { getPolicies, getPolicy } from './policy';
 import { HttpError, conflict, forbidden } from './lib/errors';
+import { assertNotOnHold } from './trust';
+import { assertNoSelfDealing } from './fraud-rules';
 
 export type ShiftRow = {
   id: string; business_id: string; site_id: string; status: string; starts_at: Date; ends_at: Date;
@@ -55,20 +57,22 @@ async function checkWorkerCanBook(tx: Tx, workerId: string, shift: ShiftRow) {
   const shiftMin = (shift.ends_at.getTime() - shift.starts_at.getTime()) / 60_000;
   if (usage.day_min + shiftMin > maxDay * 60) throw conflict('daily_hours_cap', `That would take you over ${maxDay} hours that day.`);
   if (usage.week_min + shiftMin > maxWeek * 60) throw conflict('weekly_hours_cap', `That would take you over ${maxWeek} hours that week.`);
-  // Limited accounts (strikes, Phase 4) can hold one future booking; new workers a few; established more (WRK-08).
-  const cap = w.user_status === 'limited' ? 1 : w.completed_shifts >= estAfter ? maxEst : maxNew;
+  // Strikes: "limited" can hold one upcoming shift, "on hold" none (until a person reviews). New workers a few; established more (WRK-08).
+  const strikes = await assertNotOnHold(tx, workerId);
+  const cap = w.user_status === 'limited' || strikes.level === 'limited' ? 1 : w.completed_shifts >= estAfter ? maxEst : maxNew;
   if (usage.future >= cap) throw conflict('too_many_bookings', `You can hold up to ${cap} upcoming shifts. Finish or cancel one first.`);
 }
 
-async function insertBooking(tx: Tx, workerId: string, shift: ShiftRow, source: 'direct' | 'waitlist') {
+async function insertBooking(tx: Tx, workerId: string, shift: ShiftRow, source: 'direct' | 'waitlist', nightConsent = false) {
   const restGapHours = await getPolicy<number>(tx, 'booking.rest_gap_hours');
   try {
     const r = await tx.query(
-      `INSERT INTO bookings (shift_id, worker_id, status, source, starts_at, ends_at, slot_window)
+      `INSERT INTO bookings (shift_id, worker_id, status, source, starts_at, ends_at, slot_window, night_consent_at)
        VALUES ($1, $2, 'confirmed', $3, $4, $5,
-               tstzrange($4::timestamptz - make_interval(mins => $6), $5::timestamptz + make_interval(mins => $6), '[)'))
+               tstzrange($4::timestamptz - make_interval(mins => $6), $5::timestamptz + make_interval(mins => $6), '[)'),
+               CASE WHEN $7 THEN now() END)
        RETURNING id, status, starts_at, ends_at`,
-      [shift.id, workerId, source, shift.starts_at, shift.ends_at, Math.round((restGapHours * 60) / 2)],
+      [shift.id, workerId, source, shift.starts_at, shift.ends_at, Math.round((restGapHours * 60) / 2), nightConsent],
     );
     return r.rows[0] as { id: string; status: string; starts_at: Date; ends_at: Date };
   } catch (e) {
@@ -84,10 +88,17 @@ async function insertBooking(tx: Tx, workerId: string, shift: ShiftRow, source: 
  * SYS-01: takes the last slot safely. The conditional UPDATE only succeeds while a slot is free,
  * Postgres serialises concurrent updates on the row, and a CHECK constraint backs it up.
  */
-export async function acceptShift(db: Db, workerId: string, shiftId: string) {
+export async function acceptShift(db: Db, workerId: string, shiftId: string, opts: { nightConsent?: boolean } = {}) {
+  // MON-01 runs outside the booking transaction so its fraud flag survives the refusal.
+  const owner = (await db.query('SELECT business_id FROM shifts WHERE id = $1', [shiftId])).rows[0];
+  if (owner) await assertNoSelfDealing(db, workerId, owner.business_id);
   return withTx(db, async (tx) => {
-    const shift = (await tx.query('SELECT * FROM shifts WHERE id = $1', [shiftId])).rows[0] as ShiftRow | undefined;
+    const shift = (await tx.query('SELECT * FROM shifts WHERE id = $1', [shiftId])).rows[0] as ShiftRow & { is_night: boolean; business_id: string } | undefined;
     if (!shift || shift.status !== 'live' || shift.starts_at <= new Date()) throw new HttpError(404, 'not_found', 'This shift is no longer available.');
+    const blocked = await tx.query('SELECT 1 FROM worker_blocks WHERE worker_id = $1 AND business_id = $2', [workerId, shift.business_id]);
+    if (blocked.rowCount) throw new HttpError(404, 'not_found', 'This shift is no longer available.');
+    // Night shifts: the worker sees the timing and the transport the business promised, and agrees explicitly.
+    if (shift.is_night && !opts.nightConsent) throw conflict('night_consent_required', 'This is a night shift. Please confirm you agree to the timing and transport arrangement.');
     await checkWorkerCanBook(tx, workerId, shift);
     const upd = await tx.query(
       `UPDATE shifts SET filled_count = filled_count + 1
@@ -95,7 +106,7 @@ export async function acceptShift(db: Db, workerId: string, shiftId: string) {
       [shiftId],
     );
     if (!upd.rowCount) throw conflict('shift_full', 'All slots are taken. You can join the waitlist.');
-    return insertBooking(tx, workerId, upd.rows[0], 'direct');
+    return insertBooking(tx, workerId, upd.rows[0], 'direct', Boolean(opts.nightConsent));
   });
 }
 

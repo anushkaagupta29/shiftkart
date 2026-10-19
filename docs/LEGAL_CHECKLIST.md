@@ -15,6 +15,8 @@ Nothing in this repo is legal advice or final legal text. Each item is something
 - ☐ **L-10** Strike, suspension and appeal policy: fairness and grievance obligations.
 - ☐ **L-11** Full-time conversion fee: enforceability, and that it never binds the worker.
 - ☐ **L-35** Statutory records under the Code on Wages / OSH Code (muster roll, wage register, wage slips): whose duty in the marketplace model, and whether our attendance records, timesheets and payslips meet the required format and retention.
+- ☐ **L-37** Sexual harassment (POSH Act 2013): who must run the Internal/Local Committee for workers placed through us; how our incident flow hands over to it; timelines.
+- ☐ **L-38** Strike, limit and suspension rules and the appeal process (D-062, D-063): fairness and any notice requirements; compensation percentages for late cancellation and turn-away (D-061).
 - ☐ **L-36** Allowances paid in full for a partial day (D-051), the pro-rata unpaid break (D-049), and "no pay for early arrival / staying late without agreed overtime": confirm these rules are lawful.
 
 ## Tax
@@ -38,6 +40,8 @@ Nothing in this repo is legal advice or final legal text. Each item is something
 - ☐ **L-25** Location tracking during shifts: consent and limits.
 - ☐ **L-26** Children's data: confirm age-gating is enough.
 - ☐ **L-33** Face templates kept for the life of the account and searched across accounts to catch duplicates: lawful basis, consent wording, retention, and whether the search itself needs separate consent.
+- ☐ **L-39** Scanning chat messages for scams, keeping blocked originals encrypted, and chat retention (1 year): consent and notice wording.
+- ☐ **L-40** SOS location sharing with a trusted contact: consent and retention of location trails.
 - ☐ **L-34** Language requirements on shifts: confirm they're acceptable as job requirements and not an indirect proxy for region or community (BIZ-07).
 
 ## Platform

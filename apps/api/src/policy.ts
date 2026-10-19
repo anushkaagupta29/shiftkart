@@ -12,3 +12,20 @@ export async function getPolicy<T>(db: Queryable, key: string, scope = 'global')
   if (key in DEFAULT_POLICY) return DEFAULT_POLICY[key] as T;
   throw new Error(`unknown policy key ${key}`);
 }
+
+/** Several policy values in one query (safe inside a transaction, where queries can't run in parallel). */
+export async function getPolicies<K extends string>(db: Queryable, keys: readonly K[], scope = 'global'): Promise<Record<K, number>> {
+  const r = await db.query(
+    `SELECT DISTINCT ON (key) key, value FROM policy_config
+      WHERE key = ANY($1) AND scope = $2 AND effective_from <= now() ORDER BY key, effective_from DESC`,
+    [keys, scope],
+  );
+  const found = Object.fromEntries(r.rows.map((x) => [x.key, x.value]));
+  const out = {} as Record<K, number>;
+  for (const k of keys) {
+    const v = k in found ? found[k] : DEFAULT_POLICY[k];
+    if (v === undefined) throw new Error(`unknown policy key ${k}`);
+    out[k] = v as number;
+  }
+  return out;
+}

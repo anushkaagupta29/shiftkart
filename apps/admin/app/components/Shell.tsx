@@ -13,8 +13,13 @@ export const hasRole = (s: Staff, roles: string[]) => s.roles.some((r) => roles.
 // Mirrors ADMIN_ACCESS in apps/api/src/routes/admin.ts. Only hides links: the API enforces access.
 const NAV: { href: string; label: string; roles?: string[]; section?: string }[] = [
   { href: '/', label: 'Dashboard' },
-  { href: '/users', label: 'Users', roles: ['ops_support', 'ops_verifier', 'ops_disputes', 'ops_safety', 'compliance'] },
-  { href: '/audit', label: 'Audit log', roles: ['compliance', 'super_admin'] },
+  { href: '/businesses', label: 'Business verification', roles: ['ops_verifier', 'ops_support', 'compliance'], section: 'Queues' },
+  { href: '/shift-review', label: 'Shift review', roles: ['ops_verifier', 'compliance'] },
+  { href: '/flags', label: 'Fraud flags', roles: ['ops_verifier', 'ops_safety', 'ops_disputes', 'compliance'] },
+  { href: '/users', label: 'Users', roles: ['ops_support', 'ops_verifier', 'ops_disputes', 'ops_safety', 'compliance'], section: 'Records' },
+  { href: '/payments', label: 'Payments', roles: ['finance'] },
+  { href: '/wage-rates', label: 'Minimum wages', roles: ['compliance', 'finance', 'ops_verifier'], section: 'Rules' },
+  { href: '/audit', label: 'Audit log', roles: ['compliance', 'super_admin'], section: 'Oversight' },
   { href: '/policy', label: 'Policy values', roles: ['compliance', 'super_admin', 'finance'] },
   { href: '/staff', label: 'Staff', roles: ['super_admin'] },
   { href: '/dev/outbox', label: 'SMS outbox (dev)', section: 'Developer' },

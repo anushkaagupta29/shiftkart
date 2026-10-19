@@ -6,8 +6,49 @@ Actors: 🏢 business · 👷 worker · 🧑‍💼 our staff · 🌐 outsider �
 
 ## Test status
 
-| Case | Status | Test file |
+| Case | Status | Test file (`apps/api/test/…` unless noted) |
 |---|---|---|
+| ACC-02 OTP abuse | ✅ Phase 1 | `abuse/ACC-02.test.ts` |
+| ACC-03 Token replay | ✅ Phase 1 | `abuse/ACC-03.test.ts` |
+| ACC-04 Ex-member access | ✅ Phase 1 | `abuse/ACC-04.test.ts` |
+| ACC-01 SIM swap / stolen phone | ◐ Phase 2 part: changing the payout account needs a fresh live selfie and starts a 24 h cooldown. Limited new-device sessions in Phase 3. | `abuse/WRK-01.test.ts` (MON-04 block) |
+| BIZ-01 Fake jobs to harvest IDs | ✅ Phase 2 part: unverified businesses can't post; posts asking for documents go to review; businesses never see KYC data. Chat warnings in Phase 4. | `abuse/BIZ.test.ts`, `integration/phase2-journey.test.ts` |
+| BIZ-02 Fees / deposits | ◐ Phase 2 part: fee/deposit wording in posts goes to review; no worker-pays flow exists. Chat filter in Phase 4. | `abuse/BIZ.test.ts` |
+| BIZ-03 Illegal / dangerous jobs | ✅ Phase 2 (fixed role list, keyword review, high-hazard review, own verified sites only) | `abuse/BIZ.test.ts` |
+| BIZ-04 Someone else's GSTIN | ✅ Phase 2 | `abuse/BIZ.test.ts` |
+| BIZ-05 Bait-and-switch edits | ◐ Phase 2: shifts can't be edited at all (D-039). "Work didn't match" reports in Phase 4. | `security/rbac-matrix.test.ts` (route inventory) |
+| BIZ-06 Stalking via shifts | ◐ Phase 2: roster shows first name only; no invites or worker search. Blocking in Phase 4. | `integration/phase2-journey.test.ts` |
+| BIZ-07 Discrimination | ✅ Phase 2 (no free-text requirements, keyword review, gender requirements need compliance) | `abuse/BIZ.test.ts` |
+| PAY-04 Allowances to dodge minimum wage | ✅ Phase 2 | `unit/shift-cost.test.ts`, `abuse/BIZ.test.ts` |
+| PAY-05 Wrong wage category | ✅ Phase 2 | `unit/shift-cost.test.ts`, `abuse/BIZ.test.ts` |
+| PAY-10 Funding never arrives | ✅ Phase 2 | `abuse/SYS-04.test.ts` |
+| WRK-01 Multiple accounts | ✅ Phase 2 (identity, face, bank/UPI, device) | `abuse/WRK-01.test.ts` |
+| WRK-02 Proxy worker | ◐ Phase 2: selfie must match the ID at onboarding. Check-in selfies in Phase 3. | `abuse/WRK-01.test.ts` |
+| WRK-06 Underage | ✅ Phase 2 | `abuse/WRK-01.test.ts` |
+| WRK-07 Re-registering | ✅ Phase 2 | `abuse/WRK-01.test.ts` |
+| WRK-08 Slot hoarding | ✅ Phase 2 | `abuse/SYS-02.test.ts` |
+| WRK-09 Bots | ◐ Phase 2: per-worker accept rate limit. Device integrity token in Phase 3. | `abuse/SYS-09.test.ts` |
+| OFF-02 Middleman takes a cut | ✅ Phase 2 (payout must be in the worker's own name, not shared) | `abuse/WRK-01.test.ts` |
+| MON-04 Payout redirected after takeover | ✅ Phase 2 | `abuse/WRK-01.test.ts` |
+| MSG-01 Scraping / IDOR | ✅ Phase 1 + 2 (no worker directory; roster minimal) | `abuse/MSG-01.test.ts` |
+| MSG-05 OWASP basics | ✅ Phase 1 + 2 (route × role matrix covers all new routes) | `security/owasp.test.ts`, `security/rbac-matrix.test.ts` |
+| MSG-06 PII in logs | ✅ Phase 1 | `abuse/MSG-06.test.ts` |
+| INT-01 Silent edits | ◐ audit log, policy, ledger append-only and balanced. Timesheets in Phase 3. | `abuse/INT-01.test.ts`, `abuse/SYS-04.test.ts` |
+| INT-02 Masked personal data | ✅ Phase 1 + 2 (phones, payout details finance-only and masked) | `abuse/INT-02.test.ts`, `abuse/INT-06.test.ts` |
+| INT-04 Ops colluding | ◐ Phase 2: high-risk businesses need two different verifiers. Sampling and reviewer stats in Phase 4. | `abuse/BIZ.test.ts` |
+| INT-05 Bulk export | ◐ page caps, instant offboarding. Read-volume alerts in Phase 4. | `abuse/INT-05.test.ts` |
+| INT-06 Wage-table tampering | ✅ Phase 2 (two-person approval, no backdating, amounts frozen; same for policy values) | `abuse/INT-06.test.ts` |
+| SAF-04 Pause a site | ◐ Phase 2: pausing hides shifts and blocks posting. Compensation in Phase 4. | `abuse/SYS-09.test.ts` |
+| SYS-01 Double-booking the last slot | ✅ Phase 2 (200 concurrent → exactly 1; 200 → exactly 30) | `abuse/SYS-01.test.ts` |
+| SYS-02 Overlaps / rest gap | ✅ Phase 2 | `abuse/SYS-02.test.ts` |
+| SYS-04 Webhook forgery / replay | ✅ Phase 2 | `abuse/SYS-04.test.ts` |
+| SYS-06 Ledger mismatch | ◐ every journal must balance (DB-enforced). Daily reconciliation in Phase 3. | `abuse/SYS-04.test.ts` |
+| SYS-07 Midnight / timezone | ✅ Phase 2 | `abuse/SYS-02.test.ts` |
+| SYS-09 Waitlist offer race | ✅ Phase 2 | `abuse/SYS-09.test.ts` |
+| End-to-end journeys | ✅ Phase 2: business (signup → verification → ops approval → post → fund → live) and worker (Hindi signup → onboarding → accept) | `e2e/business.spec.ts`, `e2e/worker.spec.ts` (repo root) |
+| All others | ⏳ Planned for the phase listed on each case | — |
+
+---|---|---|
 | ACC-02 OTP abuse | ✅ Phase 1 | `apps/api/test/abuse/ACC-02.test.ts` |
 | ACC-03 Token replay | ✅ Phase 1 | `apps/api/test/abuse/ACC-03.test.ts` |
 | ACC-04 Ex-member access | ✅ Phase 1 | `apps/api/test/abuse/ACC-04.test.ts` |

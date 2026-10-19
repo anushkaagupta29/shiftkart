@@ -72,6 +72,47 @@ try {
     await client.query(`INSERT INTO business_members (business_id, user_id, role, added_by) VALUES ($1, $2, 'supervisor', $3)`, [bizId, supervisor, owner]);
   }
 
+  // SAMPLE minimum wage rates, NOT real Karnataka figures (LEGAL_CHECKLIST L-04). Amounts in paise per day.
+  const sampleRates: [string, string, number, number][] = [
+    ['A', 'unskilled', 60000, 4000], ['A', 'semi_skilled', 66000, 4000], ['A', 'skilled', 72000, 4000],
+    ['B', 'unskilled', 56000, 4000], ['B', 'semi_skilled', 62000, 4000], ['B', 'skilled', 68000, 4000],
+  ];
+  for (const [zone, cat, basic, vda] of sampleRates) {
+    await client.query(
+      `INSERT INTO min_wage_rates (state_code, wage_category, zone, basic_paise_per_day, vda_paise_per_day, effective_from, source_ref, status)
+       SELECT 'KA', $1, $2, $3, $4, '2026-01-01', 'SAMPLE seed data, not a real notification', 'active'
+       WHERE NOT EXISTS (SELECT 1 FROM min_wage_rates WHERE state_code = 'KA' AND wage_category = $1 AND zone = $2)`,
+      [cat, zone, basic, vda],
+    );
+  }
+
+  // Mock GSTN registry. Any other well-formed GSTIN looks "not found" (and goes to two-person review).
+  await client.query(
+    `INSERT INTO mock_gstn_registry (gstin, legal_name) VALUES
+       ('29ABCDE1234F1Z5', 'Demo Warehouse Pvt Ltd (SAMPLE)'),
+       ('29PQRST5678K1Z2', 'Namma Retail Stores LLP'),
+       ('29LMNOP4321Q1Z9', 'Unrelated Holdings Pvt Ltd')
+     ON CONFLICT DO NOTHING`,
+  );
+
+  // The sample business gets a verified site in Bengaluru so you can post shifts straight away.
+  const demo = (await client.query(`SELECT id, verification_status FROM businesses WHERE legal_name = 'Demo Warehouse Pvt Ltd (SAMPLE)'`)).rows[0];
+  if (demo && demo.verification_status === 'draft') {
+    await client.query(
+      `INSERT INTO sites (business_id, name, address, city_code, state_code, wage_zone, location, status)
+       VALUES ($1, 'Whitefield Warehouse', 'Plot 12, EPIP Zone, Whitefield, Bengaluru 560066 (SAMPLE)', 'BLR', 'KA', 'A',
+               ST_MakePoint(77.7310, 12.9790)::geography, 'active')`,
+      [demo.id],
+    );
+    await client.query(
+      `UPDATE businesses SET verification_status = 'verified', verified_at = now() - interval '60 days', risk_tier = 'standard',
+              gstin = '29ABCDE1234F1Z5', gst_legal_name = legal_name, pan_last4 = '234F', signatory_name = 'Asha Rao (SAMPLE)',
+              submitted_at = now() - interval '61 days', decision_reason = 'Seed data'
+        WHERE id = $1`,
+      [demo.id],
+    );
+  }
+
   for (const [key, value] of Object.entries(DEFAULT_POLICY)) {
     await client.query(
       `INSERT INTO policy_config (key, value, effective_from, reason)

@@ -14,9 +14,22 @@ import { meRoutes } from './routes/me';
 import { businessRoutes } from './routes/businesses';
 import { adminRoutes } from './routes/admin';
 import { devRoutes } from './routes/dev';
+import { businessOnboardingRoutes } from './routes/business-onboarding';
+import { shiftRoutes } from './routes/shifts';
+import { paymentRoutes } from './routes/payments';
+import { workerRoutes } from './routes/worker';
+import { workerShiftRoutes } from './routes/worker-shifts';
+import { adminOpsRoutes } from './routes/admin-ops';
+import { MockKyc, type KycProvider } from './adapters/kyc';
+import { MockLiveness, type LivenessProvider } from './adapters/mock-face';
+import { MockBank, type BankVerifier } from './adapters/bank';
+import { MockGstn, type GstnProvider } from './adapters/gstn';
 import './auth/types';
 
-export type AppDeps = { db: Db; sms: SmsSender; config: Config };
+export type AppDeps = {
+  db: Db; config: Config;
+  sms: SmsSender; kyc: KycProvider; liveness: LivenessProvider; bank: BankVerifier; gstn: GstnProvider;
+};
 
 export async function buildApp(config: Config, db: Db, opts: { sms?: SmsSender; logStream?: NodeJS.WritableStream } = {}): Promise<FastifyInstance> {
   const app = Fastify({
@@ -24,7 +37,12 @@ export async function buildApp(config: Config, db: Db, opts: { sms?: SmsSender; 
     bodyLimit: 100 * 1024,
     trustProxy: false,
   });
-  const deps: AppDeps = { db, config, sms: opts.sms ?? new MockSms(db, config.hashKey) };
+  // Every external service is a mock until a sandbox is approved (DECISIONS D-006).
+  const deps: AppDeps = {
+    db, config,
+    sms: opts.sms ?? new MockSms(db, config.hashKey),
+    kyc: new MockKyc(db), liveness: new MockLiveness(), bank: new MockBank(), gstn: new MockGstn(db),
+  };
 
   await app.register(helmet);
   await app.register(cors, { origin: config.corsOrigins, credentials: true });
@@ -57,6 +75,12 @@ export async function buildApp(config: Config, db: Db, opts: { sms?: SmsSender; 
   await app.register(async (s) => meRoutes(s, deps));
   await app.register(async (s) => businessRoutes(s, deps));
   await app.register(async (s) => adminRoutes(s, deps));
+  await app.register(async (s) => businessOnboardingRoutes(s, deps));
+  await app.register(async (s) => shiftRoutes(s, deps));
+  await app.register(async (s) => paymentRoutes(s, deps));
+  await app.register(async (s) => workerRoutes(s, deps));
+  await app.register(async (s) => workerShiftRoutes(s, deps));
+  await app.register(async (s) => adminOpsRoutes(s, deps));
   if (config.devEndpoints && config.env !== 'production') await app.register(async (s) => devRoutes(s, deps));
 
   return app;

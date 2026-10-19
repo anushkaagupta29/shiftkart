@@ -33,12 +33,27 @@ describe('route inventory', () => {
     const pub = ctx.app.authTable.filter((r) => 'public' in r.auth).map((r) => `${r.method} ${r.url}`).sort();
     expect(pub).toEqual([
       'GET /health',
+      'GET /reference', // cities, roles, skills: no personal data
       'POST /admin/auth/login',
       'POST /auth/otp/request',
       'POST /auth/otp/verify',
       'POST /auth/refresh',
-      'POST /dev/outbox',
+      'POST /dev/outbox', // dev only
+      'POST /mock/digilocker/:sessionId/approve', // dev only
+      'POST /mockpay/checkout/:intentId', // dev only
+      'POST /webhooks/mockpay', // authenticated by HMAC signature instead
     ]);
+  });
+
+  it('dev-only and mock routes vanish in production', async () => {
+    const { closeApp: close, makeApp: make } = await import('../helpers');
+    const prod = await make({ env: 'production', devEndpoints: true });
+    try {
+      const urls = prod.app.authTable.map((r) => r.url);
+      for (const u of urls) expect(u).not.toMatch(/^\/(dev|mock|mockpay)\//);
+    } finally {
+      await close(prod);
+    }
   });
 
   it('every /admin route except login is staff-only', () => {

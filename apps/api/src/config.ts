@@ -10,6 +10,7 @@ export type Config = {
   devEndpoints: boolean;
   rateLimitPerMin: number;
   otpGlobalHourly: number;
+  mockpayWebhookSecret: string;
   logLevel: string;
 };
 
@@ -22,10 +23,11 @@ export function loadConfig(overrides: Partial<Config> = {}): Config {
     databaseUrl: requireEnv('DATABASE_URL'),
     dataKey: requireEnv('DATA_KEY'),
     hashKey: requireEnv('HASH_KEY'),
-    corsOrigins: [process.env.ADMIN_ORIGIN, process.env.BUSINESS_ORIGIN].filter(Boolean) as string[],
+    corsOrigins: [process.env.ADMIN_ORIGIN, process.env.BUSINESS_ORIGIN, process.env.WORKER_WEB_ORIGIN].filter(Boolean) as string[],
     devEndpoints: process.env.DEV_ENDPOINTS === 'true',
     rateLimitPerMin: Number(process.env.RATE_LIMIT_PER_MIN ?? 300),
     otpGlobalHourly: Number(process.env.OTP_GLOBAL_HOURLY ?? 1000),
+    mockpayWebhookSecret: requireEnv('MOCKPAY_WEBHOOK_SECRET'),
     logLevel: process.env.LOG_LEVEL ?? 'info',
     ...overrides,
   };

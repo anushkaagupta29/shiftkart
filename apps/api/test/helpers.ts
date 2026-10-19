@@ -28,9 +28,11 @@ export async function closeApp(ctx: Ctx) {
   await ctx.db.end();
 }
 
+const KEEP = new Set(['schema_migrations', 'cities', 'skills', 'role_categories', 'spatial_ref_sys']);
 export async function resetData(db: Db) {
-  await db.query(`TRUNCATE audit_log, dev_outbox, otp_requests, sessions, devices, consents, business_members,
-    businesses, staff_sessions, staff_users, users, policy_config RESTART IDENTITY CASCADE`);
+  const t = await db.query(`SELECT tablename FROM pg_tables WHERE schemaname = 'public'`);
+  const tables = t.rows.map((r) => r.tablename as string).filter((n) => !KEEP.has(n));
+  await db.query(`TRUNCATE ${tables.join(', ')} RESTART IDENTITY CASCADE`);
 }
 
 let counter = 0;

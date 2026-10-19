@@ -2,11 +2,16 @@
   "name": "shiftkart",
   "private": true,
   "type": "module",
-  "workspaces": ["packages/*", "apps/*"],
-  "engines": { "node": ">=20.12" },
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "engines": {
+    "node": ">=20.12"
+  },
   "scripts": {
     "setup": "node scripts/setup.mjs",
-    "dev": "concurrently -k -n api,admin -c blue,magenta \"npm run dev -w @shiftkart/api\" \"npm run dev -w @shiftkart/admin\"",
+    "dev": "concurrently -k -n api,admin,biz,worker -c blue,magenta,green,yellow \"npm run dev -w @shiftkart/api\" \"npm run dev -w @shiftkart/admin\" \"npm run dev -w @shiftkart/business\" \"npm run web -w @shiftkart/worker\"",
     "db:up": "docker compose -f infra/docker-compose.yml up -d --build --wait",
     "db:down": "docker compose -f infra/docker-compose.yml down",
     "db:migrate": "npm run migrate -w @shiftkart/db",
@@ -14,13 +19,20 @@
     "db:reset": "npm run reset -w @shiftkart/db && npm run seed -w @shiftkart/db",
     "totp": "npm run totp -w @shiftkart/db --",
     "test": "npm test -w @shiftkart/shared && npm test -w @shiftkart/api",
-    "typecheck": "npm run typecheck --workspaces --if-present"
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test:e2e": "playwright test"
   },
   "devDependencies": {
+    "@playwright/test": "^1.64.1",
+    "@types/node": "^22.0.0",
     "concurrently": "^9.1.0",
     "tsx": "^4.19.0",
     "typescript": "^5.6.0",
     "vitest": "^5.0.0",
-    "@types/node": "^22.0.0"
+    "pg": "^8.13.0"
+  },
+  "overrides": {
+    "react": "19.3.0",
+    "react-dom": "19.3.0"
   }
 }

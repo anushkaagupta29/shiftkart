@@ -21,15 +21,25 @@ try {
 }
 
 step('Creating .env');
-if (existsSync('.env')) {
-  console.log('.env already exists, keeping it');
-} else {
-  const filled = readFileSync('.env.example', 'utf8')
-    .replace(/^DATA_KEY=$/m, `DATA_KEY=${randomBytes(32).toString('base64')}`)
-    .replace(/^HASH_KEY=$/m, `HASH_KEY=${randomBytes(32).toString('base64')}`)
-    .replace(/^SEED_STAFF_PASSWORD=$/m, `SEED_STAFF_PASSWORD=${randomBytes(9).toString('base64url')}`);
-  writeFileSync('.env', filled, { mode: 0o600 });
+const secrets = {
+  DATA_KEY: () => randomBytes(32).toString('base64'),
+  HASH_KEY: () => randomBytes(32).toString('base64'),
+  SEED_STAFF_PASSWORD: () => randomBytes(9).toString('base64url'),
+  MOCKPAY_WEBHOOK_SECRET: () => randomBytes(24).toString('base64url'),
+};
+const fill = (text) => text.replace(/^([A-Z_]+)=$/gm, (line, key) => (secrets[key] ? `${key}=${secrets[key]()}` : line));
+if (!existsSync('.env')) {
+  writeFileSync('.env', fill(readFileSync('.env.example', 'utf8')), { mode: 0o600 });
   console.log('.env created with fresh random keys');
+} else {
+  // Add settings introduced since your .env was created; never touch existing values.
+  const current = readFileSync('.env', 'utf8');
+  const have = new Set([...current.matchAll(/^([A-Z_]+)=/gm)].map((m) => m[1]));
+  const missing = readFileSync('.env.example', 'utf8').split('\n').filter((l) => /^[A-Z_]+=/.test(l) && !have.has(l.split('=')[0]));
+  if (missing.length) {
+    writeFileSync('.env', current.replace(/\n?$/, '\n') + fill(missing.join('\n')) + '\n');
+    console.log(`.env kept; added ${missing.map((l) => l.split('=')[0]).join(', ')}`);
+  } else console.log('.env already exists, keeping it');
 }
 
 step('Starting Postgres (first run builds the image, ~1-2 min)');

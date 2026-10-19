@@ -35,6 +35,8 @@ Nothing in this repo is legal advice or final legal text. Each item is something
 - ☐ **L-24** Data localisation (payment data must stay in India under RBI rules).
 - ☐ **L-25** Location tracking during shifts: consent and limits.
 - ☐ **L-26** Children's data: confirm age-gating is enough.
+- ☐ **L-33** Face templates kept for the life of the account and searched across accounts to catch duplicates: lawful basis, consent wording, retention, and whether the search itself needs separate consent.
+- ☐ **L-34** Language requirements on shifts: confirm they're acceptable as job requirements and not an indirect proxy for region or community (BIZ-07).
 
 ## Platform
 - ☐ **L-27** Terms of service, privacy policy, worker agreement, business agreement. **To be drafted by a lawyer.** Placeholders in the app say "DRAFT — not final".

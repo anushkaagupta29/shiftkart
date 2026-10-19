@@ -13,6 +13,8 @@ declare module 'fastify' {
 }
 
 export const STAFF_COOKIE = 'sk_staff';
+export const USER_COOKIE = 'sk_user';
+export const USER_REFRESH_COOKIE = 'sk_user_rt';
 
 function bearer(req: FastifyRequest): string | null {
   const h = req.headers.authorization;
@@ -79,7 +81,8 @@ export function registerAuthGuard(app: FastifyInstance, db: Db): void {
       return;
     }
 
-    const token = bearer(req);
+    // Mobile app sends a Bearer token; the business web app uses an HttpOnly cookie.
+    const token = bearer(req) ?? req.cookies?.[USER_COOKIE] ?? null;
     const user = token?.startsWith('sk_at_') ? await loadUser(db, token) : null;
     if (!user) throw unauthorized();
     if (rule.user.kinds && !rule.user.kinds.includes(user.kind)) throw forbidden();

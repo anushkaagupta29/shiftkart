@@ -77,11 +77,17 @@ export async function adminRoutes(app: FastifyInstance, { db, config }: AppDeps)
              (SELECT count(*) FROM users WHERE kind = 'business') AS business_users,
              (SELECT count(*) FROM businesses) AS businesses,
              (SELECT count(*) FROM businesses WHERE verification_status = 'pending') AS businesses_pending,
-             (SELECT count(*) FROM users WHERE status = 'suspended') AS suspended_users`);
+             (SELECT count(*) FROM users WHERE status = 'suspended') AS suspended_users,
+             (SELECT count(*) FROM shifts WHERE status = 'pending_review') AS shifts_review,
+             (SELECT count(*) FROM shifts WHERE status = 'live' AND starts_at > now()) AS shifts_live,
+             (SELECT count(*) FROM fraud_flags WHERE status = 'open') AS open_flags,
+             (SELECT count(*) FROM worker_profiles WHERE verification_status = 'verified') AS verified_workers,
+             (SELECT count(*) FROM sites WHERE status = 'pending_verify' AND business_id IN (SELECT id FROM businesses WHERE verification_status = 'verified')) AS sites_review`);
     const c = r.rows[0];
     return {
-      workers: c.workers, businessUsers: c.business_users, businesses: c.businesses,
+      workers: c.workers, verifiedWorkers: c.verified_workers, businessUsers: c.business_users, businesses: c.businesses,
       businessesPendingVerification: c.businesses_pending, suspendedUsers: c.suspended_users,
+      shiftsPendingReview: c.shifts_review, liveShifts: c.shifts_live, openFraudFlags: c.open_flags, sitesPendingReview: c.sites_review,
     };
   });
 
@@ -116,10 +122,25 @@ export async function adminRoutes(app: FastifyInstance, { db, config }: AppDeps)
         WHERE m.user_id = $1 AND m.removed_at IS NULL`, [userId]);
     const sessions = await db.query(
       `SELECT count(DISTINCT family_id) AS n FROM sessions WHERE user_id = $1 AND revoked_at IS NULL AND refresh_expires_at > now()`, [userId]);
+    const s = staffActor(req);
+    const w = (await db.query(
+      `SELECT first_name, verification_status, kyc_status, dob_year, face_enrolled_at, completed_shifts, reliability_score, skills, languages
+         FROM worker_profiles WHERE user_id = $1`, [userId])).rows[0];
+    // INT-02: only finance sees payout details, and even then only the masked display form.
+    const payout = s.roles.includes('finance')
+      ? (await db.query(`SELECT type, display, status, name_match_score FROM payout_methods WHERE worker_id = $1 AND status IN ('verified', 'review')`, [userId])).rows[0]
+      : undefined;
+    const flags = await db.query(`SELECT id, rule_code, status, created_at FROM fraud_flags WHERE subject_type = 'worker' AND subject_id = $1 ORDER BY created_at DESC LIMIT 20`, [userId]);
     return {
       ...userRow(u),
       activeSessions: sessions.rows[0].n,
       businesses: memberships.rows.map((m) => ({ id: m.id, legalName: m.legal_name, role: m.role })),
+      worker: w ? {
+        firstName: w.first_name, verificationStatus: w.verification_status, kycStatus: w.kyc_status, birthYear: w.dob_year,
+        selfieDone: Boolean(w.face_enrolled_at), completedShifts: w.completed_shifts, reliability: w.reliability_score, skills: w.skills, languages: w.languages,
+      } : null,
+      ...(payout ? { payout: { type: payout.type, display: payout.display, status: payout.status, nameMatch: payout.name_match_score } } : {}),
+      flags: flags.rows.map((f) => ({ id: f.id, rule: f.rule_code, status: f.status, at: f.created_at })),
     };
   });
 

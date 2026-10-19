@@ -1,0 +1,15 @@
+{
+  "expo": {
+    "name": "ShiftKart",
+    "slug": "shiftkart-worker",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "android": {
+      "package": "in.shiftkart.worker",
+      "permissions": ["ACCESS_FINE_LOCATION", "ACCESS_COARSE_LOCATION"]
+    },
+    "web": { "bundler": "metro" },
+    "plugins": ["expo-secure-store", ["expo-location", { "locationWhenInUsePermission": "ShiftKart uses your location to show shifts near you and to check you in at the work site." }]]
+  }
+}

@@ -29,8 +29,8 @@ ShiftKart is a marketplace:
 
 | Surface | Users | Tech |
 |---|---|---|
-| Worker app | Workers | Expo (React Native), Android-first, also built for web for E2E tests |
-| Business web | Business owners, managers, site supervisors | Next.js, mobile-responsive |
+| Worker app | Workers | Expo (React Native), Android-first, also built for web for E2E tests (port 8081) |
+| Business web | Business owners, managers, site supervisors | Next.js, mobile-responsive (port 3002) |
 | Supervisor mode | Site supervisor at the gate | Part of the business web app (PWA, works offline) |
 | Admin console | Ops, support, finance, compliance, super-admin | Next.js, separate app and separate auth |
 | API | All of the above | Node + Fastify + TypeScript, Zod validation |
@@ -315,7 +315,7 @@ Status becomes `verified` and the worker can accept shifts. Browsing is allowed 
 | Phase | Delivers | Done when |
 |---|---|---|
 | **1 Foundation** ✅ | Monorepo, docker-compose, schema + migrations + seed, OTP auth (mock SMS), sessions, RBAC middleware, audit log, admin login + skeleton, README | `npm run setup && npm run dev` runs everything; RBAC + audit + OTP rate-limit tests pass |
-| **2 Supply & demand** | Business onboarding + verification queue, sites/geofence, rate table, shift posting with min-wage + cost preview, funding (mock escrow + webhooks), worker onboarding (mock KYC, liveness, penny drop), feed, accept with booking rules, waitlist | Concurrency test (200 → 1) passes; you can post → fund → accept in the browser |
+| **2 Supply & demand** ✅ | Business onboarding + verification queue, sites/geofence, rate table, shift posting with min-wage + cost preview, funding (mock escrow + webhooks), worker onboarding (mock KYC, liveness, penny drop), feed, accept with booking rules, waitlist | Concurrency test (200 → 1) passes; you can post → fund → accept in the browser |
 | **3 The shift** | Rotating QR, check-in/out with geofence + selfie + integrity (mock), breaks, offline fallback, timesheets, approval/auto-approval/partial dispute, payouts (mock), payslips, invoices, ledger + reconciliation | Full journey E2E; double-payout and webhook replay tests pass |
 | **4 Trust layer** | Cancellations + compensation, strikes + appeals, ratings, disputes, chat + filters, masking, SOS, incidents, site pause, fraud rules, admin queues | Every abuse test passes |
 | **5 Real users** | Hindi + Kannada, voice prompts, low-bandwidth/offline polish, notifications (SMS/WhatsApp mock → sandbox), dashboards | Worker app usable in Hindi end to end on a throttled network |

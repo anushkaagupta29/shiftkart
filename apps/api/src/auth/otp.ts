@@ -7,6 +7,7 @@ import { getPolicy } from '../policy';
 import { HttpError, badRequest, conflict, tooMany } from '../lib/errors';
 import { createSession, type TokenPair } from './sessions';
 import { writeAudit } from '../audit';
+import { raiseFlag } from '../fraud';
 
 export const CONSENT_VERSION = 'draft-0'; // placeholder until the lawyer-approved notice exists (L-18)
 
@@ -121,6 +122,19 @@ export async function verifyOtp(
       [user.id, lookupHash(input.deviceId, keys.hashKey), input.platform],
     );
     await tx.query('UPDATE users SET last_login_at = now() WHERE id = $1', [user.id]);
+    if (user.kind === 'worker') {
+      // WRK-01: many worker accounts on one phone is a multi-account signal. Flag for review, don't block.
+      const maxPerDevice = await getPolicy<number>(tx, 'device.max_worker_accounts');
+      const others = await tx.query(
+        `SELECT array_agg(DISTINCT d.user_id) AS ids FROM devices d JOIN users u ON u.id = d.user_id
+          WHERE d.device_id_hash = $1 AND u.kind = 'worker'`,
+        [lookupHash(input.deviceId, keys.hashKey)],
+      );
+      const ids: string[] = others.rows[0].ids ?? [];
+      if (ids.length > maxPerDevice) {
+        for (const id of ids) await raiseFlag(tx, 'worker', id, 'device_shared', { accountsOnDevice: ids.length }, 60);
+      }
+    }
     const tokens = await createSession(tx, user.id, device.rows[0].id);
     return {
       ...tokens,

@@ -1,0 +1,20 @@
+# Local development only. Credentials here are for a throwaway local database.
+name: shiftkart
+services:
+  postgres:
+    build: ./postgres
+    environment:
+      POSTGRES_USER: shiftkart
+      POSTGRES_PASSWORD: shiftkart
+      POSTGRES_DB: shiftkart
+    ports:
+      - "127.0.0.1:5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U shiftkart -d shiftkart"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+volumes:
+  pgdata:

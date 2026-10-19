@@ -1,0 +1,21 @@
+{
+  "name": "@shiftkart/db",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": { ".": "./src/index.ts" },
+  "scripts": {
+    "migrate": "tsx src/cli.ts migrate",
+    "reset": "tsx src/cli.ts reset",
+    "seed": "tsx src/seed.ts",
+    "totp": "tsx src/totp-cli.ts",
+    "typecheck": "tsc -p ."
+  },
+  "dependencies": {
+    "@shiftkart/shared": "*",
+    "pg": "^8.13.0"
+  },
+  "devDependencies": {
+    "@types/pg": "^8.11.0"
+  }
+}

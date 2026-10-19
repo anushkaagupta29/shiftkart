@@ -1,0 +1,26 @@
+{
+  "name": "shiftkart",
+  "private": true,
+  "type": "module",
+  "workspaces": ["packages/*", "apps/*"],
+  "engines": { "node": ">=20.12" },
+  "scripts": {
+    "setup": "node scripts/setup.mjs",
+    "dev": "concurrently -k -n api,admin -c blue,magenta \"npm run dev -w @shiftkart/api\" \"npm run dev -w @shiftkart/admin\"",
+    "db:up": "docker compose -f infra/docker-compose.yml up -d --build --wait",
+    "db:down": "docker compose -f infra/docker-compose.yml down",
+    "db:migrate": "npm run migrate -w @shiftkart/db",
+    "db:seed": "npm run seed -w @shiftkart/db",
+    "db:reset": "npm run reset -w @shiftkart/db && npm run seed -w @shiftkart/db",
+    "totp": "npm run totp -w @shiftkart/db --",
+    "test": "npm test -w @shiftkart/shared && npm test -w @shiftkart/api",
+    "typecheck": "npm run typecheck --workspaces --if-present"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0",
+    "vitest": "^5.0.0",
+    "@types/node": "^22.0.0"
+  }
+}

@@ -3,7 +3,7 @@ import type { Db, Tx } from './db';
 import { withTx } from './db';
 import { writeAudit } from './audit';
 import { raiseFlag } from './fraud';
-import { getPolicies } from './policy';
+import { getPolicies, getPolicy } from './policy';
 import { badRequest, conflict, forbidden, notFound } from './lib/errors';
 import {
   CHARGEBACK_LOSS, GST_PAYABLE, PLATFORM_ADJUSTMENTS, PLATFORM_REVENUE, accountBalance, clearingAccount, postJournal, shiftEscrow, workerPayable,
@@ -194,6 +194,7 @@ export async function processPayouts(db: Db, provider: PayoutProvider, dataKey: 
   await db.query(`UPDATE payouts SET status = 'queued', held_reason = NULL WHERE status = 'held' AND held_reason = 'payout_method_cooldown' AND next_attempt_at <= now()`);
   await db.query(`UPDATE payouts SET status = 'queued' WHERE status = 'processing' AND updated_at < now() - interval '5 minutes'`);
 
+  if (await getPolicy<boolean>(db, 'payouts.paused')) return 0; // queued payouts wait; nothing is lost
   const claimed = await withTx(db, async (tx) => (await tx.query(
     `UPDATE payouts SET status = 'processing', attempt_count = attempt_count + 1
       WHERE id IN (SELECT id FROM payouts WHERE status = 'queued' AND next_attempt_at <= now() ORDER BY next_attempt_at LIMIT 20 FOR UPDATE SKIP LOCKED)

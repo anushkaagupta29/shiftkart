@@ -8,6 +8,12 @@ loadRootEnv();
 export const API = 'http://localhost:4000';
 export const db = new pg.Pool({ connectionString: requireEnv('DATABASE_URL'), max: 2 });
 
+/** Each journey starts with fresh localhost OTP counters (see global-setup.ts). Local database only. */
+export async function clearLocalOtpLimits() {
+  if (!['localhost', '127.0.0.1'].includes(new URL(requireEnv('DATABASE_URL')).hostname)) throw new Error('local database only');
+  await db.query(`DELETE FROM otp_requests WHERE ip IN ('127.0.0.1', '::1', '::ffff:127.0.0.1')`);
+}
+
 export const randomPhone = () => `9${String(Math.floor(Math.random() * 1e9)).padStart(9, '0')}`;
 
 let gst = Math.floor(Math.random() * 9000) + 1000;

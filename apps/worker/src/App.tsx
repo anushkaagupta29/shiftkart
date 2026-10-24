@@ -6,7 +6,7 @@ import { ApiError, api, cached, clearSession, deviceId, flushPending, istDay, is
 import { STRINGS, type Lang, type T as Strings } from './i18n';
 import { setErrorStrings, showError, useBusy, type Booking, type Me, type Offer, type P, type Ref, type Route, type Shift, type Tab } from './common';
 import { BookingScreen, EarningsTab, PayslipScreen, PendingConfirmations } from './ShiftDay';
-import { ChatScreen, DisputeScreen, HireOffers, MeScreen, SafetyScreen } from './Trust';
+import { ChatScreen, DisputeScreen, HireOffers, MeScreen, PrivacyScreen, SafetyScreen } from './Trust';
 import { Banner, Big, Card, Chip, Field, Screen, Speak, T, useColors } from './ui';
 
 const LANG_NAMES: Record<string, string> = { hi: 'हिंदी', en: 'English', kn: 'ಕನ್ನಡ', ta: 'தமிழ்', te: 'తెలుగు', mr: 'मराठी', bn: 'বাংলা', ur: 'اردو', ml: 'മലയാളം' };
@@ -58,6 +58,7 @@ export default function App() {
       {route.name === 'chat' && <ChatScreen {...props} bookingId={route.bookingId} shiftId={route.shiftId} title={route.title} />}
       {route.name === 'safety' && <SafetyScreen {...props} bookingId={route.bookingId} />}
       {route.name === 'me' && <MeScreen {...props} />}
+      {route.name === 'privacy' && <PrivacyScreen {...props} />}
       {route.name === 'dispute' && <DisputeScreen {...props} id={route.id} />}
     </View>
   );

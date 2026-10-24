@@ -38,7 +38,7 @@ export const ShiftInput = z.object({
     skills: z.array(z.string().max(40)).max(5).default([]),
     languages: z.array(LANG).max(5).default([]),
     twoWheeler: z.boolean().default(false),
-  }).strict().default({}),
+  }).strict().prefault({}),
   dressCode: z.string().trim().max(300).default(''),
   bringItems: z.string().trim().max(300).default(''),
   onsiteContactMemberId: z.string().uuid().optional(),

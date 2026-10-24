@@ -1,6 +1,8 @@
 import { expect, test } from '@playwright/test';
 import { randomBytes } from 'node:crypto';
-import { db, freshGstin, makeStaff, randomPhone } from './helpers';
+import { db, freshGstin, makeStaff, randomPhone, clearLocalOtpLimits } from './helpers';
+
+test.beforeEach(clearLocalOtpLimits);
 
 test.afterAll(async () => { await db.end(); });
 

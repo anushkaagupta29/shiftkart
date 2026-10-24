@@ -43,7 +43,8 @@ export async function buildApp(config: Config, db: Db, opts: { sms?: SmsSender; 
   const app = Fastify({
     logger: loggerOptions(config.logLevel, opts.logStream),
     bodyLimit: 100 * 1024,
-    trustProxy: false,
+    // Trust exactly N proxy hops (e.g. one load balancer), never arbitrary X-Forwarded-For headers.
+    trustProxy: config.trustProxy === false ? false : (_addr: string, hop: number) => hop < (config.trustProxy as number),
   });
   // Every external service is a mock until a sandbox is approved (DECISIONS D-006).
   const deps: AppDeps = {

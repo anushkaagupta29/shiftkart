@@ -5,6 +5,9 @@ import type { AppDeps } from '../app';
 import { parse, uuidParam } from '../lib/validate';
 import { notFound } from '../lib/errors';
 import { userActor } from '../auth/guard';
+import { deleteAccount, exportData, grantConsent, withdrawConsent } from '../privacy';
+import { writeAudit } from '../audit';
+import { withTx } from '../db';
 
 const PatchMe = z.object({ preferredLang: z.enum(LANGS) }).strict();
 
@@ -62,5 +65,53 @@ export async function meRoutes(app: FastifyInstance, { db, config }: AppDeps) {
     );
     if (!r.rowCount) throw notFound();
     return { ok: true };
+  });
+
+  // DPDP data rights (SPEC §6.12).
+  app.get('/legal/grievance', { config: { auth: { public: true } } }, async () => ({
+    appointed: Boolean(config.grievance.name && config.grievance.email),
+    name: config.grievance.name || null,
+    email: config.grievance.email || null,
+    note: config.grievance.name ? null : 'DRAFT: a grievance officer has not been appointed yet.',
+  }));
+
+  app.get('/me/export', { config: { auth: { user: {} } } }, async (req, reply) => {
+    const a = userActor(req);
+    const data = await exportData(db, a.userId, config.dataKey);
+    await withTx(db, (tx) => writeAudit(tx, { actorType: 'user', actorId: a.userId, action: 'user.data_exported', targetType: 'user', targetId: a.userId, ip: req.ip }));
+    reply.header('content-disposition', 'attachment; filename="shiftkart-my-data.json"').header('cache-control', 'no-store');
+    return data;
+  });
+
+  app.get('/me/consents', { config: { auth: { user: {} } } }, async (req) => {
+    const r = await db.query(
+      `SELECT purpose, bool_or(withdrawn_at IS NULL) AS active FROM consents WHERE user_id = $1 GROUP BY purpose`, [userActor(req).userId],
+    );
+    return Object.fromEntries(r.rows.map((c) => [c.purpose, c.active]));
+  });
+
+  const Purpose = z.object({ purpose: z.enum(['location_at_shift', 'face_verification', 'notifications']) }).strict();
+  app.post('/me/consents/:purpose/withdraw', { config: { auth: { user: {} } } }, async (req) => {
+    const a = userActor(req);
+    const { purpose } = parse(Purpose, req.params);
+    const r = await withdrawConsent(db, a.userId, purpose);
+    await withTx(db, (tx) => writeAudit(tx, { actorType: 'user', actorId: a.userId, action: 'consent.withdrawn', targetType: 'user', targetId: a.userId, after: { purpose }, ip: req.ip }));
+    return r;
+  });
+  app.post('/me/consents/:purpose/grant', { config: { auth: { user: {} } } }, async (req) => {
+    const a = userActor(req);
+    const { purpose } = parse(Purpose, req.params);
+    const u = (await db.query('SELECT preferred_lang FROM users WHERE id = $1', [a.userId])).rows[0];
+    const r = await grantConsent(db, a.userId, purpose, u.preferred_lang);
+    await withTx(db, (tx) => writeAudit(tx, { actorType: 'user', actorId: a.userId, action: 'consent.granted', targetType: 'user', targetId: a.userId, after: { purpose }, ip: req.ip }));
+    return r;
+  });
+
+  // Needs a typed confirmation so a stray tap can't delete an account.
+  const DeleteBody = z.object({ confirm: z.literal('DELETE') }).strict();
+  app.post('/me/delete', { config: { auth: { user: {} } } }, async (req) => {
+    const a = userActor(req);
+    parse(DeleteBody, req.body);
+    return deleteAccount(db, a.userId, config.dataKey, req.ip);
   });
 }

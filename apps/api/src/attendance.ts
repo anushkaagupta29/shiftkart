@@ -130,7 +130,10 @@ export async function clockEvent(d: Deps, workerId: string, bookingId: string, t
     if (verdict === 'fail') flags.push('device_integrity_fail');
     if (verdict === 'missing') flags.push('integrity_missing');
 
-    // 4. Live selfie of the account holder (WRK-02, WRK-03).
+    // 4. Live selfie of the account holder (WRK-02, WRK-03). Not possible once the worker withdrew face consent (D-084).
+    if (await faceConsentWithdrawn(tx, workerId)) {
+      return reject('face_consent_withdrawn', forbidden('You turned off face checks. Allow them again in Privacy settings to check in.'));
+    }
     const w = (await tx.query('SELECT face_embedding FROM worker_profiles WHERE user_id = $1', [workerId])).rows[0];
     if (!selfie.live) return reject('liveness_failed', badRequest('liveness_failed', 'We could not confirm a live selfie. Try again.'));
     const score = cosineScore(fromPgVector(w.face_embedding), selfie.embedding);
@@ -187,6 +190,14 @@ export async function breakEvent(db: Db, bookingId: string, workerId: string, ac
     );
     return { onBreak: action === 'start' };
   });
+}
+
+async function faceConsentWithdrawn(tx: Queryable, workerId: string) {
+  const r = await tx.query(
+    `SELECT bool_or(withdrawn_at IS NOT NULL) AND NOT bool_or(withdrawn_at IS NULL) AS off FROM consents WHERE user_id = $1 AND purpose = 'face_verification'`,
+    [workerId],
+  );
+  return Boolean(r.rows[0]?.off);
 }
 
 /** WRK-12: optional location pings during a shift (with consent). Long absences become a review flag. */

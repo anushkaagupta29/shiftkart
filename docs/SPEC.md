@@ -292,7 +292,7 @@ Status becomes `verified` and the worker can accept shifts. Browsing is allowed 
 | Ledger, invoices, payslips | Tax/accounting | 8 years |
 | Chat | Disputes, safety | 1 year |
 
-- **Self-service export** produces JSON + PDF.
+- **Self-service export** produces JSON (PDF pending L-42). Consents (except account) can be withdrawn in the app; retention runs daily (D-082 to D-085).
 - **Deletion:** the account is deleted except for records under legal retention, plus fraud-prevention hashes (phone hash, account hash, face-embedding hash) kept under legitimate use `[LEGAL]`.
 - **Logs** use a PII-masking logger. Analytics events carry only pseudonymous IDs.
 - A **grievance officer** contact is shown in the app (placeholder), and a **breach plan** lives in `docs/BREACH_RESPONSE.md` (Phase 6).
@@ -300,7 +300,7 @@ Status becomes `verified` and the worker can accept shifts. Browsing is allowed 
 ## 7. Non-functional
 - **Rate limits:** OTP 3/15 min per phone and 10/hr per IP; login; accept; chat.
 - **Security:** OWASP Top 10 test suite, CSP, secure cookies, CSRF on web, and strict JSON schema on every input.
-- **Performance:** the accept path handles 200 concurrent accepts for the last slot with exactly one success (load test in Phase 6).
+- **Performance:** the accept path handles 200 concurrent accepts for the last slot with exactly one success. Phase 6 load test: 1000–3000 simultaneous accepts, exact headcount, about 1000 req/s per process (`docs/LOAD_TEST.md`).
 - **Performance on worker devices:** API payloads < 50KB for the feed, and images compressed client-side.
 
 ## 8. Testing strategy
@@ -319,4 +319,4 @@ Status becomes `verified` and the worker can accept shifts. Browsing is allowed 
 | **3 The shift** ✅ | Rotating QR, check-in/out with geofence + selfie + integrity (mock), breaks, offline fallback, timesheets, approval/auto-approval/partial dispute, payouts (mock), payslips, invoices, ledger + reconciliation | Full journey E2E; double-payout and webhook replay tests pass |
 | **4 Trust layer** ✅ | Cancellations + compensation, strikes + appeals, ratings, disputes, chat + filters, masking, SOS, incidents, site pause, fraud rules, admin queues | Every abuse test passes |
 | **5 Real users** ✅ | Hindi + Kannada, voice prompts, low-bandwidth/offline polish, notifications (SMS/WhatsApp mock → sandbox), dashboards | Worker app usable in Hindi end to end on a throttled network |
-| **6 Go-live readiness** | Security review, k6 load test, breach plan, legal checklist review with you, sandbox→live switch plan | Owner sign-off; live switch only with explicit permission |
+| **6 Go-live readiness** 🟡 | Security review + fixes, data rights (export, deletion, consent withdrawal, retention), load test (Node script, D-086), breach plan, go-live checklist, legal review pack, sandbox→live switch procedure | Built and tested; waiting on owner + lawyer sign-off. Live switch only with explicit permission |

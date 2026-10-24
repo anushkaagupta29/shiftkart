@@ -7,7 +7,8 @@
     "dev": "tsx watch src/server.ts",
     "start": "tsx src/server.ts",
     "test": "vitest run",
-    "typecheck": "tsc -p ."
+    "typecheck": "tsc -p .",
+    "load-test": "tsx scripts/load-test.ts"
   },
   "dependencies": {
     "@fastify/compress": "^8.3.1",
@@ -19,7 +20,7 @@
     "@shiftkart/shared": "*",
     "fastify": "^5.12.7",
     "pg": "^8.23.1",
-    "zod": "^3.25.76"
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@types/pg": "^8.23.1"

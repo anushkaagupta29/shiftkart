@@ -1,7 +1,7 @@
 import * as Location from 'expo-location';
 import { useCallback, useEffect, useState } from 'react';
-import { View } from 'react-native';
-import { api, istDay, istTime, rupees } from './api';
+import { Platform, Share, View } from 'react-native';
+import { api, clearSession, istDay, istTime, rupees } from './api';
 import { useBusy, type P } from './common';
 import { Banner, Big, Card, Chip, Field, Screen, T, useColors } from './ui';
 
@@ -168,6 +168,7 @@ export function MeScreen({ t, lang, go, setError }: P) {
       ))}
       <Big kind="secondary" icon="🛡️" label={t.safety} onPress={() => go({ name: 'safety' })} />
       <MessageSettings {...{ t, setError }} />
+      <Big testID="privacy" kind="secondary" icon="🔒" label={t.privacy} onPress={() => go({ name: 'privacy' })} />
     </Screen>
   );
 }
@@ -243,5 +244,73 @@ function MessageSettings({ t, setError }: Pick<P, 't' | 'setError'>) {
       <Chip label={t.remindersOptOut} on={p.remindersOptOut} onPress={() => save({ ...p, remindersOptOut: !p.remindersOptOut })} />
       <T muted size={14}>{t.settingsNote}</T>
     </Card>
+  );
+}
+
+type Consents = Partial<Record<'location_at_shift' | 'face_verification' | 'notifications', boolean>>;
+type Grievance = { appointed: boolean; name: string | null; email: string | null };
+
+/** DPDP data rights: see what we hold, switch purposes off, leave (SPEC §6.12). */
+export function PrivacyScreen({ t, go, setError }: P) {
+  const [c, setC] = useState<Consents | null>(null);
+  const [g, setG] = useState<Grievance | null>(null);
+  const [confirm, setConfirm] = useState<string | null>(null);
+  const [done, setDone] = useState(false);
+  const { busy, run } = useBusy(setError);
+  useEffect(() => {
+    api<Consents>('/me/consents').then(setC).catch(() => {});
+    api<Grievance>('/legal/grievance').then(setG).catch(() => {});
+  }, []);
+  const toggle = (purpose: keyof Consents) => run(async () => {
+    const on = c?.[purpose] !== false;
+    await api(`/me/consents/${purpose}/${on ? 'withdraw' : 'grant'}`, { method: 'POST' });
+    setC(await api<Consents>('/me/consents'));
+  });
+  const download = () => run(async () => {
+    const json = JSON.stringify(await api('/me/export'), null, 2);
+    if (Platform.OS === 'web') {
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(new Blob([json], { type: 'application/json' }));
+      a.download = 'shiftkart-my-data.json';
+      a.click();
+    } else {
+      await Share.share({ message: json, title: 'shiftkart-my-data.json' });
+    }
+  });
+  if (done) return <Screen title={t.privacy}><Banner kind="ok" text={t.deleted} /><Big label={t.back} onPress={() => go({ name: 'lang' })} /></Screen>;
+  return (
+    <Screen title={`🔒 ${t.privacy}`} onBack={() => go({ name: 'me' })} backLabel={t.back}>
+      <T muted>{t.privacyNote}</T>
+      <Big testID="download-data" kind="secondary" icon="⬇️" label={t.downloadData} busy={busy} onPress={download} />
+      {c && (
+        <Card>
+          {/* No row yet means the purpose was never switched off: shown as on. */}
+          <Chip testID="consent-location" label={t.privLocation} on={c.location_at_shift !== false} onPress={() => toggle('location_at_shift')} />
+          <Chip testID="consent-face" label={t.privFace} on={c.face_verification !== false} onPress={() => toggle('face_verification')} />
+          {c.face_verification === false && <T muted size={14}>{t.faceOffWarn}</T>}
+          <Chip testID="consent-notifications" label={t.privNotif} on={c.notifications !== false} onPress={() => toggle('notifications')} />
+        </Card>
+      )}
+      <Card>
+        <T bold>📮 {t.grievance}</T>
+        {g?.appointed ? <T>{g.name} · {g.email}</T> : <T muted size={14}>{t.grievanceDraft}</T>}
+      </Card>
+      <Card>
+        <T bold>{t.deleteAccount}</T>
+        <T muted size={14}>{t.deleteWarn}</T>
+        {confirm === null ? (
+          <Big testID="delete-account" kind="danger" label={t.deleteAccount} onPress={() => setConfirm('')} />
+        ) : (
+          <>
+            <Field testID="delete-confirm" label={t.typeDelete} value={confirm} onChangeText={setConfirm} autoCapitalize="characters" />
+            <Big testID="delete-account-go" kind="danger" label={t.deleteAccount} busy={busy} disabled={confirm !== 'DELETE'} onPress={() => run(async () => {
+              await api('/me/delete', { method: 'POST', body: { confirm: 'DELETE' } });
+              await clearSession();
+              setDone(true);
+            })} />
+          </>
+        )}
+      </Card>
+    </Screen>
   );
 }

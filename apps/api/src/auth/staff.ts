@@ -50,7 +50,7 @@ export async function staffLogin(db: Db, dataKey: string, input: { email: string
       [s.id, sha256(token), STAFF_SESSION_HOURS, ip],
     );
     await writeAudit(tx, { actorType: 'staff', actorId: s.id, actorRoles: s.roles, action: 'staff.login', targetType: 'staff', targetId: s.id, ip });
-    return { token, staff: { id: s.id, email: s.email, name: s.name, roles: s.roles as string[] } } as const;
+    return { token, staff: { id: s.id, email: s.email, name: s.name, roles: s.roles as string[], mustChangePassword: s.password_must_change as boolean } } as const;
   }).then((res) => {
     if ('error' in res) throw res.error;
     return res;

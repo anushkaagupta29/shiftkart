@@ -29,6 +29,7 @@ export function Shell({ children, businessId }: { children: React.ReactNode; bus
         <Link href="/" className="brand" style={{ textDecoration: 'none', color: 'inherit' }}>ShiftKart for Business</Link>
         <nav>{links.map(([href, label]) => <Link key={href} href={href!} className={path === href ? 'active' : ''}>{label}</Link>)}</nav>
         <span className="muted" style={{ marginLeft: 'auto' }}>{me.phone}</span>
+        <Link href="/privacy" className={path === '/privacy' ? 'active' : ''}>Privacy</Link>
         <button className="secondary" onClick={logout}>Log out</button>
       </header>
       <main className="page">{children}</main>

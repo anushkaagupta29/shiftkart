@@ -4,8 +4,8 @@ Nothing in this repo is legal advice or final legal text. Each item is something
 
 ## Business model and labour
 - ☐ **L-01** Marketplace vs. staffing agency / employer of record: who is the employer, and is a contract-labour licence needed (Contract Labour Act / OSH Code)? Affects invoicing, GST base and liability.
-- ☐ **L-02** Code on Social Security 2020, gig/platform worker provisions: is ShiftKart an "aggregator"? What is the welfare contribution rate and base? Config: `welfare.central.rate`.
-- ☐ **L-03** Karnataka Platform-based Gig Workers (Social Security and Welfare) Act: does it apply? What welfare fee, registration and reporting? Config: `welfare.KA.*`.
+- ☐ **L-02** Code on Social Security 2020, gig/platform worker provisions: is ShiftKart an "aggregator"? What is the welfare contribution rate and base? Not built yet (no deduction); to be added as a setting once confirmed.
+- ☐ **L-03** Karnataka Platform-based Gig Workers (Social Security and Welfare) Act: does it apply? What welfare fee, registration and reporting? Not built yet.
 - ☐ **L-04** Minimum wages per Karnataka schedule, skill level and zone, including VDA revision dates. Seed data is **sample only**.
 - ☐ **L-05** Working hours, overtime rate (we assume 2×), rest gap, daily and weekly caps.
 - ☐ **L-06** Night work and women workers: Karnataka Shops & Establishments rules on hours, consent, transport and minimum numbers.
@@ -21,7 +21,7 @@ Nothing in this repo is legal advice or final legal text. Each item is something
 
 ## Tax
 - ☐ **L-12** GST on platform fee: rate, SAC code, place of supply (CGST/SGST vs IGST), invoice format and numbering.
-- ☐ **L-13** TDS: who deducts on worker payments (business under 194C? platform under 194-O?), thresholds, PAN collection from workers. Config: `tds.*`.
+- ☐ **L-13** TDS: who deducts on worker payments (business under 194C? platform under 194-O?), thresholds, PAN collection from workers. Not built yet (no deduction, no PAN collected).
 - ☐ **L-14** TCS or other e-commerce operator obligations.
 
 ## Payments
@@ -42,6 +42,9 @@ Nothing in this repo is legal advice or final legal text. Each item is something
 - ☐ **L-33** Face templates kept for the life of the account and searched across accounts to catch duplicates: lawful basis, consent wording, retention, and whether the search itself needs separate consent.
 - ☐ **L-39** Scanning chat messages for scams, keeping blocked originals encrypted, and chat retention (1 year): consent and notice wording.
 - ☐ **L-40** SOS location sharing with a trusted contact: consent and retention of location trails.
+- ☐ **L-41** Deleting an account while suspended or limited keeps the phone hash and KYC identity hash, so the person can't re-register (D-083). Is this a legitimate use?
+- ☐ **L-42** Is the JSON data export enough for the right of access, or is a readable PDF also needed (D-082)?
+- ☐ **L-43** Deletion removes contact details, name, face template and payout details at once (stricter than SPEC's "+180 days"). Attendance location, chat and pay records are kept to their retention dates. Confirm this split and the 8-year purge for financial records.
 - ☐ **L-34** Language requirements on shifts: confirm they're acceptable as job requirements and not an indirect proxy for region or community (BIZ-07).
 
 ## Platform

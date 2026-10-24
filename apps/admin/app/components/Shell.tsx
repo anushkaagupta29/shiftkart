@@ -5,7 +5,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { createContext, useContext, useEffect, useState } from 'react';
 import { api, ApiError } from '../lib/api';
 
-export type Staff = { id: string; email: string; name: string; roles: string[] };
+export type Staff = { id: string; email: string; name: string; roles: string[]; mustChangePassword?: boolean };
 const StaffCtx = createContext<Staff | null>(null);
 export const useStaff = () => useContext(StaffCtx)!;
 export const hasRole = (s: Staff, roles: string[]) => s.roles.some((r) => roles.includes(r));
@@ -46,6 +46,8 @@ export function Shell({ children }: { children: React.ReactNode }) {
   }, [router]);
 
   if (!staff) return <div className="main muted">Loading…</div>;
+  // One-time passwords must be replaced before anything else.
+  if (staff.mustChangePassword && path !== '/account') { router.replace('/account'); return <div className="main muted">Loading…</div>; }
 
   const logout = async () => {
     await api('/admin/auth/logout', { method: 'POST', body: {} }).catch(() => {});
@@ -66,6 +68,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
               </div>
             ))}
           </nav>
+          <p className="row"><a href="/account">Change password</a></p>
           <p><button className="secondary" onClick={logout}>Log out</button></p>
         </aside>
         <main className="main">{children}</main>

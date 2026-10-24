@@ -25,7 +25,7 @@ Actors: 🏢 business · 👷 worker · 🧑‍💼 our staff · 🌐 outsider �
 | WRK-04 GPS spoofing | ✅ Phase 3 (flagged, shown to supervisor, sent to review; not silently blocked) | `abuse/ATTENDANCE.test.ts` |
 | WRK-05 Screenshotted QR | ✅ Phase 3 (30 s codes, ±1 step, bound to shift; geofence + selfie still required) | `unit/phase3.test.ts`, `abuse/ATTENDANCE.test.ts` |
 | WRK-12 Check in and leave | ✅ Phase 3 (location pings with consent; 20+ min away → flag; business can dispute minutes) | `abuse/ATTENDANCE.test.ts` |
-| WRK-07 Re-registering | ✅ Phase 2 | `abuse/WRK-01.test.ts` |
+| WRK-07 Re-registering | ✅ Phase 2, 6 (via deletion) | `abuse/WRK-01.test.ts`, `integration/data-rights.test.ts` |
 | WRK-08 Slot hoarding | ✅ Phase 2 | `abuse/SYS-02.test.ts` |
 | WRK-09 Bots | ◐ Phase 2 + 3: per-worker accept rate limit; device integrity verdict checked at check-in (mock). Integrity on accept with the real Play Integrity API at go-live. | `abuse/SYS-09.test.ts`, `abuse/ATTENDANCE.test.ts` |
 | OFF-02 Middleman takes a cut | ✅ Phase 2 (payout must be in the worker's own name, not shared) | `abuse/WRK-01.test.ts` |

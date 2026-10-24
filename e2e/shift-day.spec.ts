@@ -1,5 +1,7 @@
 import { devices, expect, test } from '@playwright/test';
-import { api, db, liveShiftViaApi, workerViaApi } from './helpers';
+import { api, db, liveShiftViaApi, workerViaApi, clearLocalOtpLimits } from './helpers';
+
+test.beforeEach(clearLocalOtpLimits);
 
 test.afterAll(async () => { await db.end(); });
 

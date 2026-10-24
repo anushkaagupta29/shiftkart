@@ -179,7 +179,7 @@ Runs unit tests (money, minimum wage, phone, crypto, 2FA) and API tests against 
 (`shiftkart_test`), including the 200-people-tap-at-once booking test. Abuse-case tests live in
 `apps/api/test/abuse/`. [docs/ABUSE_CASES.md](docs/ABUSE_CASES.md) maps each case to its test.
 
-End-to-end browser tests (business signup to live shift; worker signup in Hindi on a phone-sized screen; a full shift day; and a trust journey across all three apps):
+End-to-end browser tests (business signup to live shift; worker signup in Hindi on a phone-sized screen; a full shift day; a trust journey across all three apps; Kannada; and the worker's privacy screen: download, consent, delete):
 
 ```bash
 npm run test:e2e
@@ -198,6 +198,7 @@ They start the dev servers if they aren't running, and use the local database wi
 | `npm run db:reset` | **Wipe** the local database and re-seed it |
 | `npm run db:down` / `npm run db:up` | Stop / start the local database |
 | `npm run totp -- <email>` | Current 2FA code for a local staff account |
+| `npm run load-test -w @shiftkart/api` | Load test: 1000 workers race for one shift (wipes the **test** database only) |
 
 ## Project layout
 
@@ -210,7 +211,8 @@ e2e/            Playwright end-to-end tests
 packages/db     SQL migrations, seed data, migration runner
 packages/shared Money, phone, crypto and 2FA helpers shared by everything
 infra/          Docker setup for Postgres (with PostGIS + pgvector for later phases)
-docs/           Spec, abuse cases, decisions, legal checklist
+docs/           Spec, abuse cases, decisions, legal checklist and review pack, security review,
+                load test, breach plan, go-live checklist
 ```
 
 ## Troubleshooting
@@ -227,3 +229,20 @@ docs/           Spec, abuse cases, decisions, legal checklist
 Adapters for MSG91 (SMS) and Gupshup (WhatsApp) are in `apps/api/src/adapters/messaging.ts` but stay off.
 They need a registered company, DLT-registered templates and a verified WhatsApp Business account, and they
 refuse to run unless `ALLOW_REAL_MESSAGES=true` is set. Don't set it until you've decided to go live.
+
+## Try Phase 6 (privacy and go-live readiness)
+
+- **Your data (worker app):** 👤 Me → 🔒 *Privacy and my data*. From there you can:
+  - download everything we hold about you as JSON;
+  - switch off location checks, face checks or reminders (with face checks off, check-in is refused until you switch them back on);
+  - see the grievance contact (a DRAFT placeholder until someone is appointed);
+  - delete the account (type `DELETE`). Deletion is refused while you have an upcoming shift or unpaid pay.
+- **Your data (business app):** *Privacy* in the top bar. Download your data or delete your account (owners must transfer or close the business first).
+- **Load test:** `npm run load-test -w @shiftkart/api`. It prints latency and checks that exactly 50 of 1000 workers got the shift.
+- **Emergency stop for payouts:** in the admin console, request the policy change `payouts.paused = true`. A second compliance officer approves it, and payouts then wait in the queue until it's switched off.
+- **Before real users:**
+  - [docs/GO_LIVE.md](docs/GO_LIVE.md): what's needed, plus the sandbox → live procedure;
+  - [docs/LEGAL_REVIEW.md](docs/LEGAL_REVIEW.md): questions for a lawyer, in priority order;
+  - [docs/SECURITY_REVIEW.md](docs/SECURITY_REVIEW.md);
+  - [docs/BREACH_RESPONSE.md](docs/BREACH_RESPONSE.md).
+

@@ -85,4 +85,12 @@ export const DEFAULT_POLICY: Record<string, unknown> = {
   'review.random_sample_bp': 500,
   'mismatch.flag_count': 3,
   'velocity.new_business_workers': 5,
+  // Emergency stop for all outgoing payouts (BREACH_RESPONSE.md). Changing it needs two compliance officers.
+  'payouts.paused': false,
+  'retention.attendance_location_days': 365,
+  'retention.pings_days': 365,
+  'retention.messages_days': 365,
+  'retention.notifications_days': 90,
+  'retention.sos_location_days': 90,
+  'retention.otp_days': 30,
 };

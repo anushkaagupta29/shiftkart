@@ -9,14 +9,14 @@ import { autoApproveDue, processPayouts, reconcile, settleShifts } from './money
 import { istDate } from './time';
 import { revealDueRatings } from './community';
 import { disputeSlaCheck } from './cases';
+import { applyRetention } from './privacy';
 
 export type JobDeps = { db: Db; sms: SmsSender; payouts: PayoutProvider; dataKey: string; senders: { sms: MessageSender; whatsapp: MessageSender } };
 
 /**
  * One pass of all background work. Every job is safe to run twice at once: work is claimed with
  * row locks (SKIP LOCKED) and money movements are idempotent.
- */
-export async function runJobsOnce(d: JobDeps) {
+ */export async function runJobsOnce(d: JobDeps) {
   return {
     offersExpired: await sweepExpiredOffers(d.db, d.sms, d.dataKey),
     autoApproved: await autoApproveDue(d.db),
@@ -43,7 +43,10 @@ export function startJobs(d: JobDeps, log: { error: (o: object, m: string) => vo
       const yesterday = istDate(new Date(now.getTime() - 86400_000));
       if (istHour >= 2) {
         const done = await d.db.query('SELECT 1 FROM reconciliation_runs WHERE run_date = $1 AND run_by IS NULL', [yesterday]);
-        if (!done.rowCount) await reconcile(d.db, yesterday);
+        if (!done.rowCount) {
+          await reconcile(d.db, yesterday);
+          await applyRetention(d.db); // daily, alongside reconciliation (SPEC §6.12)
+        }
       }
     } catch (err) {
       log.error({ err }, 'background jobs failed');

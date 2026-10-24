@@ -94,6 +94,9 @@ export async function verifyOtp(
     if (!user) {
       // Don't burn the code: the app asks "worker or business?" and retries with the same code.
       if (!input.signup) return conflict('signup_required', 'New number. Choose worker or business to sign up.');
+      // A number whose account was deleted while suspended can't sign up again (WRK-07, D-083).
+      const blocked = await tx.query('SELECT 1 FROM deleted_identities WHERE phone_hash = $1 AND blocks_reregistration', [phoneHash]);
+      if (blocked.rowCount) return new HttpError(403, 'account_suspended', 'This account is suspended. Contact support.');
       if (!input.signup.consents.includes('account')) {
         return badRequest('consent_required', 'Please accept the account consent to continue.');
       }

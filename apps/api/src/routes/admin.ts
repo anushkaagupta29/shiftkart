@@ -1,11 +1,11 @@
 import { z } from 'zod';
 import type { FastifyInstance } from 'fastify';
-import { STAFF_ROLES, decrypt, encrypt, hashPassword, lookupHash, newTotpSecret, normalizeIndianPhone, randomToken, type StaffRole } from '@shiftkart/shared';
+import { STAFF_ROLES, decrypt, encrypt, hashPassword, lookupHash, newTotpSecret, normalizeIndianPhone, randomToken, verifyPassword, type StaffRole } from '@shiftkart/shared';
 import type { AppDeps } from '../app';
 import { withTx } from '../db';
 import { writeAudit, verifyAuditChain } from '../audit';
 import { pagination, parse, reasonField, uuidParam } from '../lib/validate';
-import { badRequest, conflict, forbidden, notFound } from '../lib/errors';
+import { HttpError, badRequest, conflict, forbidden, notFound } from '../lib/errors';
 import { STAFF_COOKIE, staffActor } from '../auth/guard';
 import { STAFF_SESSION_HOURS, staffLogin } from '../auth/staff';
 import { revokeAllForUser } from '../auth/sessions';
@@ -69,7 +69,26 @@ export async function adminRoutes(app: FastifyInstance, { db, config }: AppDeps)
 
   app.get('/admin/me', { config: { auth: { staff: 'any' } } }, async (req) => {
     const s = staffActor(req);
-    return { id: s.staffId, email: s.email, name: s.name, roles: s.roles };
+    const m = (await db.query('SELECT password_must_change FROM staff_users WHERE id = $1', [s.staffId])).rows[0];
+    return { id: s.staffId, email: s.email, name: s.name, roles: s.roles, mustChangePassword: m.password_must_change };
+  });
+
+  app.post('/admin/me/password', { config: { auth: { staff: 'any' } } }, async (req) => {
+    const s = staffActor(req);
+    const body = parse(z.object({
+      current: z.string().min(1).max(200),
+      next: z.string().min(12, 'Use at least 12 characters').max(200).refine((p) => /[a-zA-Z]/.test(p) && /\d/.test(p), 'Use letters and numbers'),
+    }).strict(), req.body);
+    const row = (await db.query('SELECT password_hash FROM staff_users WHERE id = $1', [s.staffId])).rows[0];
+    if (!(await verifyPassword(body.current, row.password_hash))) throw new HttpError(400, 'wrong_password', 'Current password is wrong.');
+    if (body.current === body.next) throw badRequest('same_password', 'Choose a new password.');
+    await withTx(db, async (tx) => {
+      await tx.query('UPDATE staff_users SET password_hash = $2, password_must_change = false WHERE id = $1', [s.staffId, await hashPassword(body.next)]);
+      // Other sessions end; this one stays.
+      await tx.query('UPDATE staff_sessions SET revoked_at = now() WHERE staff_id = $1 AND id <> $2 AND revoked_at IS NULL', [s.staffId, s.sessionId]);
+      await writeAudit(tx, { actorType: 'staff', actorId: s.staffId, actorRoles: s.roles, action: 'staff.password_change', targetType: 'staff', targetId: s.staffId, ip: req.ip });
+    });
+    return { ok: true };
   });
 
   app.get('/admin/summary', { config: { auth: { staff: 'any' } } }, async () => {
@@ -220,7 +239,7 @@ export async function adminRoutes(app: FastifyInstance, { db, config }: AppDeps)
     const totpSecret = newTotpSecret();
     const created = await withTx(db, async (tx) => {
       const r = await tx.query(
-        `INSERT INTO staff_users (email, name, password_hash, totp_secret_enc, roles) VALUES ($1, $2, $3, $4, $5)
+        `INSERT INTO staff_users (email, name, password_hash, totp_secret_enc, roles, password_must_change) VALUES ($1, $2, $3, $4, $5, true)
          ON CONFLICT (email) DO NOTHING RETURNING id`,
         [body.email, body.name, await hashPassword(tempPassword), encrypt(totpSecret, config.dataKey), body.roles],
       );

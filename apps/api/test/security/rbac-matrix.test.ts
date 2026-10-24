@@ -33,6 +33,7 @@ describe('route inventory', () => {
     const pub = ctx.app.authTable.filter((r) => 'public' in r.auth).map((r) => `${r.method} ${r.url}`).sort();
     expect(pub).toEqual([
       'GET /health',
+      'GET /legal/grievance', // DPDP grievance officer contact, shown before login too
       'GET /reference', // cities, roles, skills: no personal data
       'GET /safety/share/:token', // trusted contact's SOS page; the unguessable, expiring link is the key
       'POST /admin/auth/login',

@@ -47,7 +47,7 @@ const Profile = z.object({
     days: z.array(z.number().int().min(0).max(6)).max(7).default([]),
     from: z.string().regex(/^\d{2}:\d{2}$/).optional(),
     to: z.string().regex(/^\d{2}:\d{2}$/).optional(),
-  }).strict().default({ days: [] }),
+  }).strict().prefault({ days: [] }),
 }).strict();
 
 async function ensureProfile(db: Queryable, userId: string) {

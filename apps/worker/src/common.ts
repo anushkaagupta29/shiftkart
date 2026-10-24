@@ -23,7 +23,7 @@ export type Route =
   | { name: 'setup' } | { name: 'digilocker'; sessionId: string } | { name: 'selfie' } | { name: 'payout' } | { name: 'profile' }
   | { name: 'home'; tab: Tab } | { name: 'shift'; id: string }
   | { name: 'booking'; bookingId: string; shiftId: string } | { name: 'payslip'; id: string }
-  | { name: 'chat'; bookingId: string; shiftId: string; title: string } | { name: 'safety'; bookingId?: string } | { name: 'me' } | { name: 'dispute'; id: string };
+  | { name: 'chat'; bookingId: string; shiftId: string; title: string } | { name: 'safety'; bookingId?: string } | { name: 'me' } | { name: 'privacy' } | { name: 'dispute'; id: string };
 
 export type Tab = 'shifts' | 'mine' | 'offers' | 'earnings';
 

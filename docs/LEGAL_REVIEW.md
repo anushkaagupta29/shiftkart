@@ -2,7 +2,7 @@
 
 > - This is not legal advice. It is a working list for a lawyer meeting, built from `LEGAL_CHECKLIST.md`.
 > - For each item it says what the system does today, where the setting lives, and what we need back.
-> - **Nothing is confirmed yet.** Every item is still ☐ until a lawyer signs off.
+> - **Nothing is confirmed yet.** On 2026-10-24 the owner accepted my default answers as working assumptions (◐, listed at the end of `LEGAL_CHECKLIST.md`, D-089). They are what the system is built on, **not** legal conclusions. Each item becomes ☑ only when a lawyer confirms it.
 
 ## Priority 1: blocks any launch (decides how the business is set up)
 | ID | Question for the lawyer | What the code does now | Where to change it |
@@ -11,7 +11,7 @@
 | L-15 | Escrow structure: which RBI-authorised PA holds business money, and how? | A per-shift escrow account in our own ledger (mock). | Payment adapter + ledger accounts. |
 | L-27 | Terms of service, privacy notice, worker and business agreements | Placeholders saying "DRAFT — not final"; consent version `draft-0`. | `CONSENT_VERSION` in `auth/otp.ts`; app copy. |
 | L-32 | Company registration; any state aggregator registration | None. | — |
-| L-02, L-03 | Gig-worker social security: Central Code, and the Karnataka Platform-based Gig Workers Act: rates, registration, reporting | **Not built yet:** no welfare fee is charged or deducted (`money.ts`, payslip deductions = 0). | Will be added as settings once the rates are confirmed. |
+| L-02, L-03 | Gig-worker social security: Central Code, and the Karnataka Platform-based Gig Workers Act: rates, registration, reporting | Built (D-090): charged to the business on top of worker pay and never deducted from workers; on the invoice as its own line with no GST. **Rate 0 until confirmed.** | `welfare.central_bp`, `welfare.state_bp` (scope `state:KA`) |
 | L-21 | Aadhaar via DigiLocker / a licensed KYC provider, never storing the number: is our flow compliant? | Only name, birth year and a one-way reference hash are kept. | `routes/worker.ts` (KYC complete). |
 
 ## Priority 2: needed before real money and real workers
@@ -55,4 +55,4 @@
 L-08, L-09 (gender and age rules per role), L-10 and L-11 (strikes; the full-time hire fee never binding the worker), L-24 (data localisation for the hosting choice), L-26 (age-gating), L-28 (IT Act intermediary duties), L-29 (DLT, call masking), L-30 (trademark), L-31 (bonded labour / trafficking reporting), L-34 (language requirements on shifts).
 
 ## What I need back from you after the lawyer meeting
-For each ID: ☑ confirmed (and the value, if it's a setting) or ◐ needs a change (what). I'll update the settings, `LEGAL_CHECKLIST.md` and DECISIONS, and add tests where a rule changes.
+For each ID: ☑ the assumption is confirmed (with the value, if it's a setting), or ✎ the assumption is wrong (what it should be). I'll update the settings, `LEGAL_CHECKLIST.md` and DECISIONS, and add tests where a rule changes.

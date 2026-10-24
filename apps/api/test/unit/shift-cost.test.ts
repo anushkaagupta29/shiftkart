@@ -20,6 +20,15 @@ describe('computeShiftCost', () => {
     expect(c.totalPaise).toBe(750000 + 50000 + 112500 + 20250);
   });
 
+  it('welfare contributions are on worker pay only, rounded per worker, and added on top (D-089)', () => {
+    const c = computeShiftCost({ ...base, welfareCentralBp: 100, welfareStateBp: 33 });
+    expect(c.welfareCentralPaise).toBe(7500);      // 1% of ₹750 × 10
+    expect(c.welfareStatePaise).toBe(2480);        // 0.33% of ₹750 = ₹2.475 → ₹2.48 per worker, × 10
+    expect(c.perWorkerPayPaise).toBe(75000);       // the worker's pay is untouched
+    expect(c.totalPaise).toBe(750000 + 50000 + 112500 + 20250 + 7500 + 2480);
+    expect(computeShiftCost(base)).toMatchObject({ welfareCentralPaise: 0, welfareStatePaise: 0, welfareCentralBp: 0, welfareStateBp: 0 });
+  });
+
   it('per-shift pay is not multiplied by hours', () => {
     const c = computeShiftCost({ ...base, payType: 'per_shift', payPaise: 80000 });
     expect(c.perWorkerPayPaise).toBe(80000);

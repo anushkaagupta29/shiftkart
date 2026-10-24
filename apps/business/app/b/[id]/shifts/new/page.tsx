@@ -7,7 +7,7 @@ import { api, errText, istToIso, rupees, toPaise } from '../../../../lib/api';
 
 type Ref = { roles: { code: string; name: { en: string }; wageCategory: string; skills: string[] }[]; skills: { code: string; name: { en: string } }[]; languages: string[] };
 type Site = { id: string; name: string; status: string };
-type Cost = { paidMinutes: number; perWorkerPayPaise: number; effectiveHourlyPaise: number; workerPayTotalPaise: number; allowancesTotalPaise: number; feePaise: number; gstOnFeePaise: number; totalPaise: number; feeBp: number; gstBp: number };
+type Cost = { paidMinutes: number; perWorkerPayPaise: number; effectiveHourlyPaise: number; workerPayTotalPaise: number; allowancesTotalPaise: number; feePaise: number; gstOnFeePaise: number; totalPaise: number; feeBp: number; gstBp: number; welfareCentralPaise: number; welfareStatePaise: number; welfareCentralBp: number; welfareStateBp: number };
 type Preview = { cost: Cost; wageCategory: string; minHourlyPaise: number; needsReview: string[]; isNight?: boolean };
 
 const LANG_NAMES: Record<string, string> = { en: 'English', hi: 'Hindi', kn: 'Kannada', ta: 'Tamil', te: 'Telugu', ml: 'Malayalam', mr: 'Marathi', bn: 'Bengali', ur: 'Urdu' };
@@ -109,6 +109,9 @@ function NewShift() {
               <tr><td>Allowances</td><td>{rupees(preview.cost.allowancesTotalPaise)}</td></tr>
               <tr><td>ShiftKart fee ({preview.cost.feeBp / 100}% of worker pay)</td><td>{rupees(preview.cost.feePaise)}</td></tr>
               <tr><td>GST on fee ({preview.cost.gstBp / 100}%)</td><td>{rupees(preview.cost.gstOnFeePaise)}</td></tr>
+              {preview.cost.welfareCentralPaise + preview.cost.welfareStatePaise > 0 && (
+                <tr><td>Gig-worker welfare contribution ({(preview.cost.welfareCentralBp + preview.cost.welfareStateBp) / 100}% of worker pay, paid by you, not the worker)</td><td>{rupees(preview.cost.welfareCentralPaise + preview.cost.welfareStatePaise)}</td></tr>
+              )}
               <tr className="total"><td>You fund now</td><td>{rupees(preview.cost.totalPaise)}</td></tr>
             </tbody></table>
             <p className="muted">Minimum base pay here: {rupees(preview.minHourlyPaise)}/hour ({preview.wageCategory.replace('_', '-')}). Allowances don&apos;t count toward it.</p>

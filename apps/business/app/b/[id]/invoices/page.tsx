@@ -7,7 +7,7 @@ import { api, errText, ist, rupees } from '../../../lib/api';
 
 type Inv = {
   id: string; number: string; issuedAt: string; buyer: { legalName: string; gstin: string | null; stateCode: string | null }; seller: { legalName: string; gstin: string; stateCode: string; sac: string };
-  lines: { description: string; sac: string; taxablePaise: number }[]; taxablePaise: number; cgstPaise: number; sgstPaise: number; igstPaise: number; totalPaise: number;
+  lines: { description: string; sac?: string; taxablePaise?: number; passThroughPaise?: number }[]; taxablePaise: number; cgstPaise: number; sgstPaise: number; igstPaise: number; passThroughPaise: number; totalPaise: number;
 };
 
 function Invoices() {
@@ -19,7 +19,7 @@ function Invoices() {
   return (
     <>
       <h2>Invoices</h2>
-      <p className="muted">One GST invoice per shift for our fee, issued when the shift closes. Worker pay is not invoiced by us; unused money is refunded to how you paid.</p>
+      <p className="muted">One invoice per shift for our fee (with GST) and any gig-worker welfare contribution, issued when the shift closes. Worker pay is not invoiced by us; unused money is refunded to how you paid.</p>
       {err && <p className="err">{err}</p>}
       {sel && (
         <div className="panel" id="invoice">
@@ -31,10 +31,11 @@ function Invoices() {
             <div><b>To</b><br />{sel.buyer.legalName}<br />GSTIN {sel.buyer.gstin ?? '—'}</div>
           </div>
           <table className="cost" style={{ marginTop: 12 }}><tbody>
-            {sel.lines.map((l, i) => <tr key={i}><td>{l.description} (SAC {l.sac})</td><td>{rupees(l.taxablePaise)}</td></tr>)}
+            {sel.lines.filter((l) => l.taxablePaise != null).map((l, i) => <tr key={i}><td>{l.description} (SAC {l.sac})</td><td>{rupees(l.taxablePaise!)}</td></tr>)}
             {sel.cgstPaise > 0 && <tr><td>CGST</td><td>{rupees(sel.cgstPaise)}</td></tr>}
             {sel.sgstPaise > 0 && <tr><td>SGST</td><td>{rupees(sel.sgstPaise)}</td></tr>}
             {sel.igstPaise > 0 && <tr><td>IGST</td><td>{rupees(sel.igstPaise)}</td></tr>}
+            {sel.lines.filter((l) => l.passThroughPaise != null).map((l, i) => <tr key={`w${i}`}><td>{l.description} (no GST)</td><td>{rupees(l.passThroughPaise!)}</td></tr>)}
             <tr className="total"><td>Total</td><td>{rupees(sel.totalPaise)}</td></tr>
           </tbody></table>
           <p className="row"><button className="secondary" onClick={() => window.print()}>Print / save as PDF</button><button className="secondary" onClick={() => setSel(null)}>Close</button></p>

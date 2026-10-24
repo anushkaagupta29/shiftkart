@@ -19,7 +19,7 @@ ShiftKart is a marketplace:
 | Launch region | Bengaluru, Karnataka |
 | Launch languages | Hindi, English, Kannada |
 | Launch roles | Warehouse packing/loading, retail floor/billing counter, event setup/event staff |
-| Fee | 15% of worker pay `[CONFIG]`, plus GST on the fee |
+| Fee | 15% of worker pay `[CONFIG]`, plus GST on the fee. Gig-worker welfare contribution on worker pay, paid by the business, rate 0 until confirmed `[CONFIG]` `[LEGAL]` (D-090) |
 | Worker fees | **None, ever.** Workers never pay anything. |
 | Services | Every external service (KYC, liveness, payments, payouts, SMS/WhatsApp, masked calls) runs behind an adapter with a local mock. Sandbox only after vendor selection, and live only with explicit owner approval. |
 

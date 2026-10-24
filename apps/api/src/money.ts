@@ -6,7 +6,7 @@ import { raiseFlag } from './fraud';
 import { getPolicies, getPolicy } from './policy';
 import { badRequest, conflict, forbidden, notFound } from './lib/errors';
 import {
-  CHARGEBACK_LOSS, GST_PAYABLE, PLATFORM_ADJUSTMENTS, PLATFORM_REVENUE, accountBalance, clearingAccount, postJournal, shiftEscrow, workerPayable,
+  CHARGEBACK_LOSS, GST_PAYABLE, PLATFORM_ADJUSTMENTS, PLATFORM_REVENUE, accountBalance, clearingAccount, postJournal, shiftEscrow, welfarePayable, workerPayable,
 } from './ledger';
 import { payForMinutes } from './domain/timesheet';
 import { financialYear, gstSplit } from './domain/gst';
@@ -24,30 +24,42 @@ export const SELLER = { legalName: 'ShiftKart (company not yet registered)', gst
 
 type Timesheet = Record<string, any>;
 
+/** What the business pays on top of worker pay for one release. Never taken from the worker. */
+type Charges = { fee: number; gst: number; welfareCentral: number; welfareState: number };
+
+const chargesTotal = (c: Charges) => c.fee + c.gst + c.welfareCentral + c.welfareState;
+const zipCharges = (a: Charges, b: Charges, f: (x: number, y: number) => number): Charges =>
+  ({ fee: f(a.fee, b.fee), gst: f(a.gst, b.gst), welfareCentral: f(a.welfareCentral, b.welfareCentral), welfareState: f(a.welfareState, b.welfareState) });
+
 /**
- * Fee and GST for a timesheet, computed per funded component (base pay, overtime) exactly as they
- * were when the business funded them, so a release can never exceed what's in escrow by a paisa.
+ * Fee, GST and welfare for a timesheet, computed per funded component (base pay, overtime) exactly as
+ * they were when the business funded them, so a release can never exceed what's in escrow by a paisa.
  */
 function feesFor(t: Timesheet) {
   const bp = (x: number, r: number) => applyBasisPoints(x, r);
-  const base = Number(t.base_pay_paise), ot = Number(t.overtime_pay_paise);
-  const fee = bp(base, t.fee_bp) + bp(ot, t.fee_bp);
-  const gst = bp(bp(base, t.fee_bp), t.gst_bp) + bp(bp(ot, t.fee_bp), t.gst_bp);
-  return { fee, gst, ofPay: (x: number) => ({ fee: bp(x, t.fee_bp), gst: bp(bp(x, t.fee_bp), t.gst_bp) }) };
+  const ofPay = (x: number): Charges => ({
+    fee: bp(x, t.fee_bp), gst: bp(bp(x, t.fee_bp), t.gst_bp),
+    welfareCentral: bp(x, t.welfare_central_bp ?? 0), welfareState: bp(x, t.welfare_state_bp ?? 0),
+  });
+  const total = zipCharges(ofPay(Number(t.base_pay_paise)), ofPay(Number(t.overtime_pay_paise)), (a, b) => a + b);
+  return { total, ofPay };
 }
 
 /**
  * Releases money for (part of) a timesheet: moves it out of the shift's escrow into the worker's
- * payable account, books our fee and GST on the fee, and queues a payout. Idempotent on `key`.
- * Fee is charged on worker pay only (not allowances), at the rates frozen when the shift was posted.
+ * payable account, books our fee, GST on the fee and the welfare contributions, and queues a payout.
+ * Idempotent on `key`. Charges are on worker pay only (not allowances), at the rates frozen when the
+ * shift was posted.
  */
-async function release(tx: Tx, t: Timesheet, amount: number, fee: number, gst: number, key: string, kind: 'wage' | 'dispute_award') {
+async function release(tx: Tx, t: Timesheet, amount: number, c: Charges, key: string, kind: 'wage' | 'dispute_award') {
   if (amount <= 0) return null;
   const j = await postJournal(tx, { kind: 'fee', refType: 'shift', refId: t.shift_id, idempotencyKey: key, memo: `timesheet ${t.id}` }, [
-    { account: shiftEscrow(t.shift_id), type: 'shift_escrow', ownerId: t.business_id, amountPaise: -(amount + fee + gst) },
+    { account: shiftEscrow(t.shift_id), type: 'shift_escrow', ownerId: t.business_id, amountPaise: -(amount + chargesTotal(c)) },
     { account: workerPayable(t.worker_id), type: 'worker_payable', ownerId: t.worker_id, amountPaise: amount },
-    ...(fee ? [{ account: PLATFORM_REVENUE, type: 'revenue', amountPaise: fee }] : []),
-    ...(gst ? [{ account: GST_PAYABLE, type: 'tax', amountPaise: gst }] : []),
+    ...(c.fee ? [{ account: PLATFORM_REVENUE, type: 'revenue', amountPaise: c.fee }] : []),
+    ...(c.gst ? [{ account: GST_PAYABLE, type: 'tax', amountPaise: c.gst }] : []),
+    ...(c.welfareCentral ? [{ account: welfarePayable('central'), type: 'welfare_payable', amountPaise: c.welfareCentral }] : []),
+    ...(c.welfareState ? [{ account: welfarePayable(t.welfare_state ?? 'state'), type: 'welfare_payable', amountPaise: c.welfareState }] : []),
   ], { nonNegative: [shiftEscrow(t.shift_id)] });
   if (j.duplicate) return null;
   await tx.query(
@@ -55,7 +67,7 @@ async function release(tx: Tx, t: Timesheet, amount: number, fee: number, gst: n
      VALUES ($1, $2, $3, $4, 'queued', $5, $6) ON CONFLICT (idempotency_key) DO NOTHING`,
     [t.worker_id, t.id, kind, amount, `payout:${key}`, key],
   );
-  return { amount, fee, gst };
+  return { amount, ...c };
 }
 
 export async function approveTimesheet(db: Db, t0: { id: string; businessId: string }, by: { userId: string } | 'auto', ip?: string) {
@@ -73,8 +85,7 @@ export async function approveTimesheet(db: Db, t0: { id: string; businessId: str
       [t.id, auto ? 'auto_approved' : 'approved', auto ? null : by.userId],
     );
     await tx.query('UPDATE worker_profiles SET completed_shifts = completed_shifts + 1 WHERE user_id = $1', [t.worker_id]);
-    const f = feesFor(t);
-    const r = await release(tx, t, Number(t.gross_paise), f.fee, f.gst, `approve:${t.id}`, 'wage');
+    const r = await release(tx, t, Number(t.gross_paise), feesFor(t).total, `approve:${t.id}`, 'wage');
     await writeAudit(tx, { actorType: auto ? 'system' : 'user', actorId: auto ? null : by.userId, action: auto ? 'timesheet.auto_approve' : 'timesheet.approve', targetType: 'timesheet', targetId: t.id, after: r ?? {}, ip });
     return { status: auto ? 'auto_approved' : 'approved', payoutPaise: r?.amount ?? 0 };
   });
@@ -104,7 +115,7 @@ export async function disputeTimesheet(db: Db, t0: { id: string; businessId: str
     );
     const f = feesFor(t);
     const held = f.ofPay(disputedPay);
-    const r = await release(tx, t, undisputedPay + Number(t.allowances_paise), Math.max(0, f.fee - held.fee), Math.max(0, f.gst - held.gst), `approve-undisputed:${t.id}`, 'wage');
+    const r = await release(tx, t, undisputedPay + Number(t.allowances_paise), zipCharges(f.total, held, (all, h) => Math.max(0, all - h)), `approve-undisputed:${t.id}`, 'wage');
     // Every dispute becomes a case with a timeline both sides can follow and add to.
     await openCase(tx, { kind: 'timesheet', bookingId: t.booking_id, timesheetId: t.id, openedBy: 'business', actorId: userId,
       summary: `Business disputes ${input.minutes} min (${input.category.replaceAll('_', ' ')}): ${input.reason}. ₹${(disputedPay / 100).toFixed(2)} held; the rest was paid.` });
@@ -166,8 +177,7 @@ export async function resolveDispute(db: Db, timesheetId: string, staff: { staff
     }
     if (award > 0) {
       const f = feesFor(t);
-      const a = f.ofPay(award), held = f.ofPay(Number(t.disputed_paise));
-      await release(tx, t, award, Math.min(a.fee, held.fee), Math.min(a.gst, held.gst), `dispute-award:${t.id}`, 'dispute_award');
+      await release(tx, t, award, zipCharges(f.ofPay(award), f.ofPay(Number(t.disputed_paise)), Math.min), `dispute-award:${t.id}`, 'dispute_award');
     }
     await writeAudit(tx, { actorType: 'staff', actorId: staff.staffId, actorRoles: staff.roles, action: 'timesheet.resolved', targetType: 'timesheet', targetId: t.id, reason, after: { awardMinutes: minutes, awardPaise: award }, ip });
     return { status: 'resolved', awardPaise: award };
@@ -287,7 +297,8 @@ async function createPayslip(tx: Tx, p: Record<string, any>, destination: string
     lines.push({ label: p.kind === 'dispute_award' ? 'Dispute decided in your favour' : 'Payment from ShiftKart', detail: p.reason ?? undefined, paise: Number(p.amount_paise) });
   }
   const gross = lines.filter((l) => l.paise > 0).reduce((a, l) => a + l.paise, 0);
-  const deductions = 0; // TDS / welfare deductions: configurable once confirmed (LEGAL L-02, L-03, L-13)
+  // Nothing is deducted from workers: welfare is paid by the business on top (D-089); TDS not built (L-13).
+  const deductions = 0;
   const net = Number(p.amount_paise);
   await tx.query(
     `INSERT INTO payslips (number, worker_id, payout_id, timesheet_id, lines, gross_paise, deductions_paise, net_paise) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
@@ -359,28 +370,37 @@ export async function settleShift(db: Db, provider: PayoutProvider, shiftId: str
       remaining -= amount;
     }
 
-    const fee = (await tx.query(
-      `SELECT COALESCE(sum(e.amount_paise) FILTER (WHERE a.code = $2), 0)::bigint AS fee
+    const booked = (await tx.query(
+      `SELECT COALESCE(sum(e.amount_paise) FILTER (WHERE a.code = $2), 0)::bigint AS fee,
+              COALESCE(sum(e.amount_paise) FILTER (WHERE a.code = $3), 0)::bigint AS welfare_central,
+              COALESCE(sum(e.amount_paise) FILTER (WHERE a.code LIKE 'welfare_payable:%' AND a.code <> $3), 0)::bigint AS welfare_state
          FROM journals j JOIN ledger_entries e ON e.journal_id = j.id JOIN ledger_accounts a ON a.id = e.account_id
         WHERE j.ref_type = 'shift' AND j.ref_id = $1`,
-      [shiftId, PLATFORM_REVENUE],
-    )).rows[0].fee as number;
-    if (fee > 0) {
+      [shiftId, PLATFORM_REVENUE, welfarePayable('central')],
+    )).rows[0];
+    const fee = Number(booked.fee), welfareCentral = Number(booked.welfare_central), welfareState = Number(booked.welfare_state);
+    if (fee > 0 || welfareCentral > 0 || welfareState > 0) {
       const b = (await tx.query('SELECT legal_name, gstin FROM businesses WHERE id = $1', [s.business_id])).rows[0];
       const buyerState = b.gstin ? (b.gstin.slice(0, 2) === '29' ? 'KA' : `GST-${b.gstin.slice(0, 2)}`) : null;
       const split = gstSplit(fee, s.cost.gstBp, SELLER.stateCode, buyerState);
+      // Welfare is collected for the welfare board, not our revenue: its own line, no GST (to confirm, L-12).
+      const lines = [
+        ...(fee > 0 ? [{ description: `Platform fee: "${s.title}" on ${istDate(s.starts_at)}`, sac: SELLER.sac, taxablePaise: fee }] : []),
+        ...(welfareCentral > 0 ? [{ description: 'Gig-worker welfare contribution (central), collected for remittance', passThroughPaise: welfareCentral }] : []),
+        ...(welfareState > 0 ? [{ description: `Gig-worker welfare contribution (${s.cost.welfareState ?? 'state'}), collected for remittance`, passThroughPaise: welfareState }] : []),
+      ];
+      const passThrough = welfareCentral + welfareState;
       await tx.query(
-        `INSERT INTO invoices (number, business_id, shift_id, buyer, seller, lines, taxable_paise, cgst_paise, sgst_paise, igst_paise, total_paise)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+        `INSERT INTO invoices (number, business_id, shift_id, buyer, seller, lines, taxable_paise, cgst_paise, sgst_paise, igst_paise, pass_through_paise, total_paise)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
         [await nextNumber(tx, `INV/${financialYear(new Date())}`), s.business_id, shiftId,
          JSON.stringify({ legalName: b.legal_name, gstin: b.gstin, stateCode: buyerState }), JSON.stringify(SELLER),
-         JSON.stringify([{ description: `Platform fee: "${s.title}" on ${istDate(s.starts_at)}`, sac: SELLER.sac, taxablePaise: fee }]),
-         fee, split.cgst, split.sgst, split.igst, fee + split.total],
+         JSON.stringify(lines), fee, split.cgst, split.sgst, split.igst, passThrough, fee + split.total + passThrough],
       );
     }
     await tx.query(`UPDATE shifts SET status = CASE WHEN status = 'live' THEN 'completed' ELSE status END, settled_at = now() WHERE id = $1`, [shiftId]);
     await velocityCheck(tx, s);
-    await writeAudit(tx, { actorType: 'system', action: 'shift.settled', targetType: 'shift', targetId: shiftId, after: { refunded: (await accountBalance(tx, shiftEscrow(shiftId))) === 0, feePaise: fee } });
+    await writeAudit(tx, { actorType: 'system', action: 'shift.settled', targetType: 'shift', targetId: shiftId, after: { refunded: (await accountBalance(tx, shiftEscrow(shiftId))) === 0, feePaise: fee, welfarePaise: welfareCentral + welfareState } });
     return true;
   });
 }

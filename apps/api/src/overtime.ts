@@ -31,12 +31,14 @@ export async function requestOvertime(db: Db, biz: { businessId: string; userId:
     const workerPay = Number((BigInt(hourly) * BigInt(extraMinutes) * BigInt(pol['overtime.multiplier_bp']) * 2n + 600_000n) / 1_200_000n);
     const fee = applyBasisPoints(workerPay, b.cost.feeBp);
     const gst = applyBasisPoints(fee, b.cost.gstBp);
+    // Welfare on overtime pay too, paid by the business (D-089); rounded per rate, as at release.
+    const welfare = applyBasisPoints(workerPay, b.cost.welfareCentralBp ?? 0) + applyBasisPoints(workerPay, b.cost.welfareStateBp ?? 0);
     let ot;
     try {
       ot = (await tx.query(
-        `INSERT INTO overtime_requests (booking_id, shift_id, extra_minutes, multiplier_bp, worker_pay_paise, fee_paise, gst_paise, total_paise, requested_by)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
-        [bookingId, b.shift_id, extraMinutes, pol['overtime.multiplier_bp'], workerPay, fee, gst, workerPay + fee + gst, biz.userId],
+        `INSERT INTO overtime_requests (booking_id, shift_id, extra_minutes, multiplier_bp, worker_pay_paise, fee_paise, gst_paise, welfare_paise, total_paise, requested_by)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
+        [bookingId, b.shift_id, extraMinutes, pol['overtime.multiplier_bp'], workerPay, fee, gst, welfare, workerPay + fee + gst + welfare, biz.userId],
       )).rows[0];
     } catch (e) {
       if ((e as { code?: string }).code === '23505') throw conflict('overtime_open', 'There is already an overtime request for this worker.');

@@ -13,6 +13,9 @@ export type CostInput = {
   travelAllowancePaise: Paise;
   feeBp: number;
   gstBp: number;
+  /** Welfare contribution rates (LEGAL L-02, L-03). Paid by the business on top; 0 until confirmed. */
+  welfareCentralBp?: number;
+  welfareStateBp?: number;
 };
 
 export type ShiftCost = {
@@ -24,9 +27,13 @@ export type ShiftCost = {
   allowancesTotalPaise: Paise;
   feePaise: Paise;
   gstOnFeePaise: Paise;
+  welfareCentralPaise: Paise;
+  welfareStatePaise: Paise;
   totalPaise: Paise;
   feeBp: number;
   gstBp: number;
+  welfareCentralBp: number;
+  welfareStateBp: number;
 };
 
 /** (a × b) / c rounded half-up, integer-only. */
@@ -46,7 +53,9 @@ export function paidMinutes(startsAt: Date, endsAt: Date, breakMinutes: number):
 
 /**
  * What the business pays to fund a shift (SPEC §6.3):
- * worker pay + allowances + platform fee (on worker pay only) + GST on the fee.
+ * worker pay + allowances + platform fee (on worker pay only) + GST on the fee
+ * + welfare contributions (on worker pay only; assumption D-089, basis to confirm with the lawyer).
+ * Nothing here is ever taken from the worker.
  */
 export function computeShiftCost(i: CostInput): ShiftCost {
   for (const [k, v] of Object.entries({ pay: i.payPaise, meal: i.mealAllowancePaise, travel: i.travelAllowancePaise })) assertPaise(v, k);
@@ -59,6 +68,9 @@ export function computeShiftCost(i: CostInput): ShiftCost {
   // Rounded per worker, then multiplied, so each worker's release can never exceed what was funded for them.
   const fee = applyBasisPoints(perWorkerPay, i.feeBp) * i.headcount;
   const gst = applyBasisPoints(applyBasisPoints(perWorkerPay, i.feeBp), i.gstBp) * i.headcount;
+  const welfareCentralBp = i.welfareCentralBp ?? 0, welfareStateBp = i.welfareStateBp ?? 0;
+  const welfareCentral = applyBasisPoints(perWorkerPay, welfareCentralBp) * i.headcount;
+  const welfareState = applyBasisPoints(perWorkerPay, welfareStateBp) * i.headcount;
   return {
     paidMinutes: minutes,
     perWorkerPayPaise: perWorkerPay,
@@ -68,9 +80,13 @@ export function computeShiftCost(i: CostInput): ShiftCost {
     allowancesTotalPaise: allowancesTotal,
     feePaise: fee,
     gstOnFeePaise: gst,
-    totalPaise: assertPaise(workerPayTotal + allowancesTotal + fee + gst, 'total'),
+    welfareCentralPaise: welfareCentral,
+    welfareStatePaise: welfareState,
+    totalPaise: assertPaise(workerPayTotal + allowancesTotal + fee + gst + welfareCentral + welfareState, 'total'),
     feeBp: i.feeBp,
     gstBp: i.gstBp,
+    welfareCentralBp,
+    welfareStateBp,
   };
 }
 

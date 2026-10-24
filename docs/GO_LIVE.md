@@ -12,7 +12,7 @@
 | G-02 | **Engage a lawyer** for the legal review pack (LEGAL_REVIEW.md) | Terms, privacy notice, the worker/business agreements, and the employer-of-record question decide how money flows. |
 | G-03 | **Appoint a grievance officer** and set `GRIEVANCE_OFFICER_NAME` / `GRIEVANCE_OFFICER_EMAIL` | The API refuses to start in production without them (DPDP, L-22). |
 | G-04 | **Native-speaker review** of the Hindi and Kannada strings (`apps/worker/src/i18n.ts`, `apps/api/src/notify/templates.ts`) | I drafted them (D-077). |
-| G-06 | **TDS and welfare-fee deductions** are not built (payslip deductions are 0). They need the lawyer's answers first (L-02, L-03, L-13). | Paying workers without required deductions is a compliance gap. |
+| G-06 | **Set the welfare rates.** The contribution is built (D-090) but set to 0. Enter the confirmed rates (`welfare.central_bp`, `welfare.state_bp` for `state:KA`; a two-person policy change), and build remittance to the welfare board(s) from the `welfare_payable:*` accounts. TDS is assumed not needed for now (L-13). | Paying without a required contribution is a compliance gap. |
 | G-05 | Trademark search for "ShiftKart" | L-30 |
 
 ## 1. Vendors: sandbox first

@@ -8,7 +8,7 @@ import { api, errText, ist, rupees } from '../../../../lib/api';
 type Detail = {
   id: string; title: string; siteName: string; startsAt: string; endsAt: string; headcount: number; filled: number; status: string;
   payType: string; payPaise: number; totalPaise: number; reviewReasons: string[]; waitlisted: number;
-  cost: { workerPayTotalPaise: number; allowancesTotalPaise: number; feePaise: number; gstOnFeePaise: number; totalPaise: number };
+  cost: { workerPayTotalPaise: number; allowancesTotalPaise: number; feePaise: number; gstOnFeePaise: number; welfareCentralPaise?: number; welfareStatePaise?: number; totalPaise: number };
   roster: { bookingId: string; firstName: string; status: string; bookedAt: string; source: string }[];
   payments: { id: string; status: string; amountPaise: number; createdAt: string }[];
 };
@@ -74,6 +74,7 @@ function ShiftDetail() {
           <tr><td>Allowances</td><td>{rupees(s.cost.allowancesTotalPaise)}</td></tr>
           <tr><td>Fee</td><td>{rupees(s.cost.feePaise)}</td></tr>
           <tr><td>GST on fee</td><td>{rupees(s.cost.gstOnFeePaise)}</td></tr>
+          {(s.cost.welfareCentralPaise ?? 0) + (s.cost.welfareStatePaise ?? 0) > 0 && <tr><td>Gig-worker welfare contribution</td><td>{rupees((s.cost.welfareCentralPaise ?? 0) + (s.cost.welfareStatePaise ?? 0))}</td></tr>}
           <tr className="total"><td>Total</td><td>{rupees(s.cost.totalPaise)}</td></tr>
         </tbody></table>
         <p className="row">

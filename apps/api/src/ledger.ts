@@ -55,6 +55,8 @@ export const shiftEscrow = (shiftId: string) => `shift_escrow:${shiftId}`;
 export const workerPayable = (workerId: string) => `worker_payable:${workerId}`;
 export const PLATFORM_REVENUE = 'platform_revenue';
 export const GST_PAYABLE = 'gst_payable';
+/** Welfare contributions collected from businesses, owed to the welfare board (central, or a state code). */
+export const welfarePayable = (scope: string) => `welfare_payable:${scope}`;
 export const CHARGEBACK_LOSS = 'chargeback_loss';
 export const PLATFORM_ADJUSTMENTS = 'platform_adjustments';
 export const clearingAccount = (provider: string) => `provider_clearing:${provider}`;

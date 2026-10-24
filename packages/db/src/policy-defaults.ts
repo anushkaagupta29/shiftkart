@@ -3,6 +3,10 @@
 export const DEFAULT_POLICY: Record<string, unknown> = {
   'fee.platform_bp': 1500,
   'tax.gst_on_fee_bp': 1800,
+  // Gig-worker welfare contribution, on worker pay, paid by the BUSINESS on top (never deducted from workers).
+  // 0 until a lawyer confirms the rates (LEGAL L-02 central code, L-03 state act; set state rates with scope state:KA).
+  'welfare.central_bp': 0,
+  'welfare.state_bp': 0,
   'otp.ttl_sec': 300,
   'otp.max_attempts': 5,
   'otp.per_phone_15min': 3,

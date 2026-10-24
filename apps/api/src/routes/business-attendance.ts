@@ -156,7 +156,7 @@ export async function businessAttendanceRoutes(app: FastifyInstance, { db, confi
     const r = await db.query(`SELECT * FROM invoices WHERE business_id = $1 ORDER BY issued_at DESC LIMIT 200`, [businessId]);
     return r.rows.map((i) => ({
       id: i.id, number: i.number, shiftId: i.shift_id, issuedAt: i.issued_at, buyer: i.buyer, seller: i.seller, lines: i.lines,
-      taxablePaise: Number(i.taxable_paise), cgstPaise: Number(i.cgst_paise), sgstPaise: Number(i.sgst_paise), igstPaise: Number(i.igst_paise), totalPaise: Number(i.total_paise),
+      taxablePaise: Number(i.taxable_paise), cgstPaise: Number(i.cgst_paise), sgstPaise: Number(i.sgst_paise), igstPaise: Number(i.igst_paise), passThroughPaise: Number(i.pass_through_paise), totalPaise: Number(i.total_paise),
     }));
   });
 

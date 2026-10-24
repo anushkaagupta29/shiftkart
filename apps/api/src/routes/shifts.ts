@@ -95,7 +95,10 @@ async function evaluateShift(db: Queryable, businessId: string, body: ShiftInput
 
   const pol = await getPolicies(db, ['fee.platform_bp', 'tax.gst_on_fee_bp']);
   const feeBp = pol['fee.platform_bp'], gstBp = pol['tax.gst_on_fee_bp'];
-  const cost = computeShiftCost({ ...body, startsAt, endsAt, feeBp, gstBp });
+  // Welfare: the central rate is global; the state rate comes from the site's state (scope state:KA).
+  const welfareCentralBp = await getPolicy<number>(db, 'welfare.central_bp');
+  const welfareStateBp = (await getPolicies(db, ['welfare.state_bp'], `state:${site.state_code}`))['welfare.state_bp'];
+  const cost = { ...computeShiftCost({ ...body, startsAt, endsAt, feeBp, gstBp, welfareCentralBp, welfareStateBp }), welfareState: site.state_code as string };
 
   // Night window from state rules (falls back to the national default).
   const nightPol = await getPolicies(db, ['night.start_min', 'night.end_min', 'night.transport_required'], `state:${site.state_code}`);

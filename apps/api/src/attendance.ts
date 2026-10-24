@@ -352,11 +352,13 @@ export async function createTimesheet(tx: Tx, bookingId: string, dataKey?: strin
   const manual = events.some((e) => e.mode === 'offline_supervisor');
   const r = await tx.query(
     `INSERT INTO timesheets (booking_id, shift_id, business_id, worker_id, started_at, ended_at, break_minutes, payable_minutes, overtime_minutes,
-        base_pay_paise, overtime_pay_paise, allowances_paise, gross_paise, fee_bp, gst_bp, flags, status, approval_deadline)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17, now() + make_interval(hours => $18)) RETURNING *`,
+        base_pay_paise, overtime_pay_paise, allowances_paise, gross_paise, fee_bp, gst_bp, flags, status, approval_deadline,
+        welfare_central_bp, welfare_state_bp, welfare_state)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17, now() + make_interval(hours => $18), $19, $20, $21) RETURNING *`,
     [bookingId, b.shift_id, b.business_id, b.worker_id, calc.startedAt, calc.endedAt, calc.breakMinutes, calc.payableMinutes, calc.overtimeMinutes,
      calc.basePayPaise, calc.overtimePayPaise, calc.allowancesPaise, calc.grossPaise, b.cost.feeBp, b.cost.gstBp, [...flags],
-     manual ? 'awaiting_confirmation' : 'pending_approval', pol['timesheet.approval_window_hours']],
+     manual ? 'awaiting_confirmation' : 'pending_approval', pol['timesheet.approval_window_hours'],
+     b.cost.welfareCentralBp ?? 0, b.cost.welfareStateBp ?? 0, b.cost.welfareState ?? null],
   );
   if (!manual && dataKey) {
     const w = (await tx.query('SELECT p.first_name, s.title FROM worker_profiles p, shifts s WHERE p.user_id = $1 AND s.id = $2', [b.worker_id, b.shift_id])).rows[0];

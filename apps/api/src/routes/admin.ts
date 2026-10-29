@@ -10,6 +10,7 @@ import { STAFF_COOKIE, staffActor } from '../auth/guard';
 import { STAFF_SESSION_HOURS, staffLogin } from '../auth/staff';
 import { revokeAllForUser } from '../auth/sessions';
 import { recordStaffRead } from '../fraud-rules';
+import { issueRemovalNotice, noticeRow, pendingNotice, withdrawRemovalNotice } from '../removal';
 
 // Who can do what (docs/SPEC.md §4). Kept in one place so the RBAC tests can read it.
 export const ADMIN_ACCESS = {
@@ -32,7 +33,7 @@ const UserList = pagination.extend({
 }).strict();
 const PhoneSearch = z.object({ phone: z.string().max(20) }).strict();
 const Reason = z.object({ reason: reasonField }).strict();
-const UserStatus = z.object({ status: z.enum(['active', 'limited', 'suspended']), reason: reasonField }).strict();
+const UserStatus = z.object({ status: z.enum(['active', 'limited', 'suspended']), reason: reasonField, interimHold: z.boolean().optional() }).strict();
 const AuditList = pagination.extend({ action: z.string().max(100).optional(), targetId: z.string().max(100).optional() }).strict();
 const CreateStaff = z.object({
   email: z.string().email().max(200),
@@ -172,6 +173,7 @@ export async function adminRoutes(app: FastifyInstance, { db, config }: AppDeps)
       } : null,
       ...(payout ? { payout: { type: payout.type, display: payout.display, status: payout.status, nameMatch: payout.name_match_score } } : {}),
       flags: flags.rows.map((f) => ({ id: f.id, rule: f.rule_code, status: f.status, at: f.created_at })),
+      removalNotice: w ? (await pendingNotice(db, userId).then((n) => n && noticeRow(n))) : null,
     };
   });
 
@@ -190,16 +192,32 @@ export async function adminRoutes(app: FastifyInstance, { db, config }: AppDeps)
   app.post('/admin/users/:userId/status', { config: { auth: { staff: ADMIN_ACCESS.changeUserStatus } } }, async (req) => {
     const s = staffActor(req);
     const { userId } = parse(uuidParam('userId'), req.params);
-    const { status, reason } = parse(UserStatus, req.body);
-    await withTx(db, async (tx) => {
-      const before = (await tx.query('SELECT status FROM users WHERE id = $1 FOR UPDATE', [userId])).rows[0];
+    const { status, reason, interimHold } = parse(UserStatus, req.body);
+    return withTx(db, async (tx) => {
+      const before = (await tx.query('SELECT status, kind FROM users WHERE id = $1 FOR UPDATE', [userId])).rows[0];
       if (!before) throw notFound();
       if (before.status === 'deleted') throw conflict('user_deleted', 'Deleted accounts cannot be changed.');
+      if (interimHold && !(before.kind === 'worker' && status === 'suspended')) throw badRequest('invalid', 'interimHold only applies when removing a worker.');
+      // Workers are removed only after written notice (D-091): suspending one issues the notice instead.
+      if (before.kind === 'worker' && status === 'suspended' && before.status !== 'suspended') {
+        const n = await issueRemovalNotice(tx, { dataKey: config.dataKey }, s, userId, reason, Boolean(interimHold), req.ip);
+        return { ok: true, notice: noticeRow(n) };
+      }
+      // Reactivating a worker ends any running notice.
+      const running = before.kind === 'worker' && status === 'active' ? await pendingNotice(tx, userId) : null;
+      if (running) await withdrawRemovalNotice(tx, { dataKey: config.dataKey }, s, running.id, reason, req.ip);
       await tx.query('UPDATE users SET status = $2 WHERE id = $1', [userId, status]);
       if (status === 'suspended') await revokeAllForUser(tx, userId, 'suspended');
       await writeAudit(tx, { actorType: 'staff', actorId: s.staffId, actorRoles: s.roles, action: 'user.status_change', targetType: 'user', targetId: userId, reason, before: { status: before.status }, after: { status }, ip: req.ip });
+      return { ok: true };
     });
-    return { ok: true };
+  });
+
+  app.post('/admin/removal-notices/:noticeId/withdraw', { config: { auth: { staff: ADMIN_ACCESS.changeUserStatus } } }, async (req) => {
+    const s = staffActor(req);
+    const { noticeId } = parse(uuidParam('noticeId'), req.params);
+    const { reason } = parse(Reason, req.body);
+    return withTx(db, async (tx) => noticeRow(await withdrawRemovalNotice(tx, { dataKey: config.dataKey }, s, noticeId, reason, req.ip)));
   });
 
   // --- Audit log ---

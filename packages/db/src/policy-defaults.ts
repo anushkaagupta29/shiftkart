@@ -31,6 +31,8 @@ export const DEFAULT_POLICY: Record<string, unknown> = {
   'strikes.suspend_threshold': 6,
   'strikes.expiry_days': 90,
   'strikes.emergency_per_90d': 2,
+  // Days of written notice before a worker is removed (Karnataka gig workers act: 14). Never below 14 (removal.ts).
+  'removal.notice_days': 14,
   'overtime.multiplier_bp': 20000,
   'qr.rotation_sec': 30,
   'geofence.default_m': 150,

@@ -9,3 +9,6 @@ coverage/
 *.tsbuildinfo
 test-results/
 playwright-report/
+
+# Personal job-search notes (not part of the project)
+career/

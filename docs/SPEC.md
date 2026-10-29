@@ -248,7 +248,7 @@ Status becomes `verified` and the worker can accept shifts. Browsing is allowed 
 | Worker cancels < 12h | 1 strike point |
 | No-show | 2 points |
 | ≥ 3 points in 30 days | 7 days limited (max 1 future booking) |
-| ≥ 6 points | 30-day suspension pending human review. Never automatic permanent bans. |
+| ≥ 6 points | 30-day suspension pending human review. Never automatic permanent bans. Closing the account after review needs 14 days' written notice (D-091). |
 | Emergency exception | 2 per 90 days, removes the strike, no proof needed. More claims → appeal with optional proof. |
 | Strike expiry | 90 days. Every strike can be appealed, and an ops decision comes within 72h. |
 | Overtime | Business requests → worker accepts in the app → business tops up escrow → paid at 2× the ordinary rate `[CONFIG][LEGAL]` |

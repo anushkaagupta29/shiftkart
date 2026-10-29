@@ -5,7 +5,8 @@ import { Shell, hasRole, useStaff } from '../components/Shell';
 import { api, ApiError, fmtIST } from '../lib/api';
 
 type User = { id: string; kind: string; status: string; preferredLang: string; phone: string; createdAt: string; lastLoginAt: string | null };
-type Detail = User & { activeSessions: number; businesses: { id: string; legalName: string; role: string }[] };
+type Notice = { id: string; reasons: string; interimHold: boolean; issuedAt: string; effectiveAt: string; workerResponse: string | null };
+type Detail = User & { activeSessions: number; businesses: { id: string; legalName: string; role: string }[]; removalNotice?: Notice | null };
 type Page = { total: number; page: number; pageSize: number; items: User[] };
 
 function UserDetail({ id, onChanged }: { id: string; onChanged: () => void }) {
@@ -27,9 +28,15 @@ function UserDetail({ id, onChanged }: { id: string; onChanged: () => void }) {
     const r = await api<{ phone: string }>(`/admin/users/${id}/reveal-phone`, { method: 'POST', body: { reason } });
     setRevealed(r.phone); setMsg('Revealed. This action is in the audit log.');
   });
-  const setStatus = (status: string) => act(async () => {
-    await api(`/admin/users/${id}/status`, { method: 'POST', body: { status, reason } });
-    setMsg(`Status set to ${status}.`); load(); onChanged();
+  const setStatus = (status: string, interimHold?: boolean) => act(async () => {
+    const r = await api<{ notice?: Notice }>(`/admin/users/${id}/status`, { method: 'POST', body: { status, reason, ...(interimHold && { interimHold }) } });
+    // Workers are removed only after 14 days' written notice (D-091).
+    setMsg(r.notice ? `Removal notice sent. The account closes on ${fmtIST(r.notice.effectiveAt)} unless you withdraw it.` : `Status set to ${status}.`);
+    load(); onChanged();
+  });
+  const withdraw = (noticeId: string) => act(async () => {
+    await api(`/admin/removal-notices/${noticeId}/withdraw`, { method: 'POST', body: { reason } });
+    setMsg('Notice withdrawn. The worker has been told.'); load(); onChanged();
   });
 
   if (!d) return <div className="panel">{err || 'Loading…'}</div>;
@@ -46,6 +53,13 @@ function UserDetail({ id, onChanged }: { id: string; onChanged: () => void }) {
         <tr><th>Signed up</th><td>{fmtIST(d.createdAt)}</td></tr>
         <tr><th>Last login</th><td>{fmtIST(d.lastLoginAt)}</td></tr>
         <tr><th>Active devices</th><td>{d.activeSessions}</td></tr>
+        {d.removalNotice && (
+          <tr><th>Removal notice</th><td>
+            Closes {fmtIST(d.removalNotice.effectiveAt)}{d.removalNotice.interimHold ? ' (on safety hold until then)' : ''}.<br />
+            Reasons: {d.removalNotice.reasons}<br />
+            Worker&apos;s reply: {d.removalNotice.workerResponse ?? <span className="muted">none yet</span>}
+          </td></tr>
+        )}
         <tr><th>Businesses</th><td>{d.businesses.length ? d.businesses.map((b) => `${b.legalName} (${b.role})`).join(', ') : '—'}</td></tr>
       </tbody></table>
       {(canReveal || canStatus) && (
@@ -56,7 +70,10 @@ function UserDetail({ id, onChanged }: { id: string; onChanged: () => void }) {
           <div className="row" style={{ marginTop: 8 }}>
             {canReveal && <button className="secondary" onClick={reveal}>Reveal phone</button>}
             {canStatus && d.status !== 'limited' && <button className="secondary" onClick={() => setStatus('limited')}>Limit</button>}
-            {canStatus && d.status !== 'suspended' && <button className="danger" onClick={() => setStatus('suspended')}>Suspend</button>}
+            {canStatus && d.status !== 'suspended' && d.kind !== 'worker' && <button className="danger" onClick={() => setStatus('suspended')}>Suspend</button>}
+            {canStatus && d.kind === 'worker' && d.status !== 'suspended' && !d.removalNotice && <button className="danger" onClick={() => setStatus('suspended')}>Give removal notice (14 days)</button>}
+            {canReveal && d.kind === 'worker' && d.status !== 'suspended' && !d.removalNotice && <button className="danger" onClick={() => setStatus('suspended', true)}>Safety hold + notice</button>}
+            {canStatus && d.removalNotice && <button onClick={() => withdraw(d.removalNotice!.id)}>Withdraw notice</button>}
             {canStatus && d.status !== 'active' && <button onClick={() => setStatus('active')}>Reactivate</button>}
           </div>
         </div>

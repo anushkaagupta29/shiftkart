@@ -10,6 +10,7 @@ import { istDate } from './time';
 import { revealDueRatings } from './community';
 import { disputeSlaCheck } from './cases';
 import { applyRetention } from './privacy';
+import { effectRemovals } from './removal';
 
 export type JobDeps = { db: Db; sms: SmsSender; payouts: PayoutProvider; dataKey: string; senders: { sms: MessageSender; whatsapp: MessageSender } };
 
@@ -25,6 +26,7 @@ export type JobDeps = { db: Db; sms: SmsSender; payouts: PayoutProvider; dataKey
     ratingsRevealed: await revealDueRatings(d.db),
     disputesOverdue: await disputeSlaCheck(d.db),
     remindersQueued: await queueReminders(d.db, d.dataKey),
+    workersRemoved: await effectRemovals(d.db, { dataKey: d.dataKey }),
     // Last, so messages queued by the jobs above go out in the same pass.
     messagesSent: await dispatchNotifications(d.db, d.senders, { dataKey: d.dataKey }),
   };

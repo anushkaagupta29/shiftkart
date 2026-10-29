@@ -3,6 +3,7 @@ import { withTx } from './db';
 import type { SmsSender } from './adapters/sms';
 import { notify } from './notify/notify';
 import { getPolicies, getPolicy } from './policy';
+import { assertNoInterimHold } from './removal';
 import { HttpError, conflict, forbidden } from './lib/errors';
 import { assertNotOnHold } from './trust';
 import { assertNoSelfDealing } from './fraud-rules';
@@ -37,6 +38,7 @@ async function checkWorkerCanBook(tx: Tx, workerId: string, shift: ShiftRow) {
   )).rows[0];
   if (!w || w.verification_status !== 'verified') throw forbidden('Finish verification before accepting shifts.');
   if (w.user_status === 'suspended' || w.user_status === 'deleted') throw forbidden();
+  await assertNoInterimHold(tx, workerId);
 
   const elig = eligibility(w, shift.requirements);
   if (!elig.eligible) throw new HttpError(403, 'not_eligible', `This shift needs: ${elig.missing.join(', ')}`);

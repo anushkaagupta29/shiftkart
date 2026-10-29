@@ -53,10 +53,15 @@ describe('INT-01 audit log integrity', () => {
     expect(noReason.statusCode).toBe(400);
     const ok = await ctx.app.inject({ method: 'POST', url: `/admin/users/${w.userId}/status`, headers: safety.cookie, payload: { status: 'suspended', reason: 'Fraud report #123' } });
     expect(ok.statusCode).toBe(200);
-    const row = (await ctx.db.query(`SELECT * FROM audit_log WHERE action = 'user.status_change' AND target_id = $1`, [w.userId])).rows[0];
-    expect(row).toMatchObject({ actor_id: safety.staffId, reason: 'Fraud report #123', before: { status: 'active' }, after: { status: 'suspended' } });
-    // Suspension also kills the user's sessions.
-    expect((await ctx.app.inject({ method: 'GET', url: '/me', headers: w.auth })).statusCode).toBe(401);
+    // Workers get a removal notice first (D-091); see removal-notice.test.ts.
+    const row = (await ctx.db.query(`SELECT * FROM audit_log WHERE action = 'worker.removal_notice' AND target_id = $1`, [w.userId])).rows[0];
+    expect(row).toMatchObject({ actor_id: safety.staffId, reason: 'Fraud report #123' });
+    // Other accounts are suspended at once, and that kills their sessions.
+    const biz = await signUp(ctx, 'business');
+    await ctx.app.inject({ method: 'POST', url: `/admin/users/${biz.userId}/status`, headers: safety.cookie, payload: { status: 'suspended', reason: 'Fraud report #124' } });
+    const row2 = (await ctx.db.query(`SELECT * FROM audit_log WHERE action = 'user.status_change' AND target_id = $1`, [biz.userId])).rows[0];
+    expect(row2).toMatchObject({ actor_id: safety.staffId, reason: 'Fraud report #124', before: { status: 'active' }, after: { status: 'suspended' } });
+    expect((await ctx.app.inject({ method: 'GET', url: '/me', headers: biz.auth })).statusCode).toBe(401);
   });
 
   it("super admins can't change their own roles", async () => {

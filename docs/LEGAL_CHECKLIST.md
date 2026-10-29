@@ -5,7 +5,7 @@ Nothing in this repo is legal advice or final legal text. Each item is something
 ## Business model and labour
 - ◐ **L-01** Marketplace vs. staffing agency / employer of record: who is the employer, and is a contract-labour licence needed (Contract Labour Act / OSH Code)? Affects invoicing, GST base and liability.
 - ◐ **L-02** Code on Social Security 2020, gig/platform worker provisions: is ShiftKart an "aggregator"? What is the welfare contribution rate and base? Config: `welfare.central_bp` (default 0). Charged to the business, never deducted from workers (D-090).
-- ◐ **L-03** Karnataka Platform-based Gig Workers (Social Security and Welfare) Act: does it apply? What welfare fee, registration and reporting? Config: `welfare.state_bp` with scope `state:KA` (default 0) (D-090).
+- ◐ **L-03** Karnataka Platform-based Gig Workers (Social Security and Welfare) Act: does it apply? What welfare fee, registration and reporting? Config: `welfare.state_bp` with scope `state:KA` (default 0) (D-090). Removal of a worker needs written reasons and 14 days' notice: built (D-091), `removal.notice_days`. To confirm: may a safety incident justify an interim hold during the notice?
 - ◐ **L-04** Minimum wages per Karnataka schedule, skill level and zone, including VDA revision dates. Seed data is **sample only**.
 - ◐ **L-05** Working hours, overtime rate (we assume 2×), rest gap, daily and weekly caps.
 - ◐ **L-06** Night work and women workers: Karnataka Shops & Establishments rules on hours, consent, transport and minimum numbers.
@@ -61,7 +61,7 @@ These are what the system is built on today. **They are not legal conclusions.**
 | ID | Working assumption |
 |---|---|
 | L-01 | Marketplace. The business is the employer; ShiftKart invoices only its fee plus GST on the fee. |
-| L-02, L-03 | Welfare contributions apply to us as an aggregator. **Paid by the business on top, never deducted from the worker.** Charged on worker pay (base plus overtime, not allowances), shown as its own non-GST invoice line, held in `welfare_payable:*` accounts. Built (D-090) with rate 0 until the lawyer gives the rate and basis. |
+| L-02, L-03 | Welfare contributions apply to us as an aggregator. **Paid by the business on top, never deducted from the worker.** Charged on worker pay (base plus overtime, not allowances), shown as its own non-GST invoice line, held in `welfare_payable:*` accounts. Built (D-090) with rate 0 until the lawyer gives the rate and basis. Removing a worker takes written reasons and 14 days' notice (D-091); an interim safety hold during the notice is assumed allowed. |
 | L-04 | The seeded Karnataka minimum wages are samples. Real rates are entered and checked before launch; posting below the rate stays blocked. |
 | L-05, L-36 | 2× overtime; 8 h rest gap; 12 h per day; allowances in full for a partial day; pro-rata unpaid break; no pay for unagreed early arrival or staying late. |
 | L-06 | Night window 20:00–06:00. The business must promise transport, and every worker gives explicit consent (no gender-based rules, since we don't store gender). |

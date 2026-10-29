@@ -1,13 +1,45 @@
 # ShiftKart
 
-Short-shift staffing for India: businesses post pre-funded shifts, verified workers pick them,
-check in on site, and get paid within a day. **Status: Phase 5 (polish for real users) done.** Everything runs
-on your laptop. Nothing talks to a real SMS, payment, bank or KYC service: those are all mocks.
+**Short-shift staffing for India.** Businesses post pre-funded shifts (warehouse, retail, events,
+kitchens); verified workers pick them in Hindi, Kannada or English, check in on site, and are paid
+within a day. Workers never pay anything to get or keep a shift.
 
-- Product spec: [docs/SPEC.md](docs/SPEC.md)
-- Abuse cases and their tests: [docs/ABUSE_CASES.md](docs/ABUSE_CASES.md)
-- Decisions and assumptions: [docs/DECISIONS.md](docs/DECISIONS.md)
-- Items to confirm with a lawyer: [docs/LEGAL_CHECKLIST.md](docs/LEGAL_CHECKLIST.md)
+> A personal project: a complete, tested platform built to production standards. Every external
+> service (SMS, payments, payouts, KYC) is a mock, so it runs entirely on a laptop.
+> 2-minute walkthrough: see [docs/DEMO_SCRIPT.md](docs/DEMO_SCRIPT.md).
+
+## Highlights
+
+| Area | Problem it solves |
+|---|---|
+| **Concurrency** | 1000 workers tap "Accept" on a 50-slot shift in the same second. Exactly 50 get it, nobody is double-booked into overlapping shifts, and there are no server errors. One conditional `UPDATE` plus a row lock does this; it is load-tested at about **1000 req/s on one laptop process** (p95 333 ms at 200 in flight). [docs/LOAD_TEST.md](docs/LOAD_TEST.md) |
+| **Money** | Double-entry ledger with append-only journals that must sum to zero; all amounts are integer paise. Each shift has its own escrow, funded before it goes live. Payouts and refunds are idempotent, webhook replays are rejected, there is daily reconciliation, and an emergency payout stop needs two people. |
+| **Attendance** | Check-in uses a QR / 6-digit code that rotates every 30 s, a geofence, and a selfie match. It works offline at the gate and flags fake GPS. Timesheets include breaks and overtime, and businesses can dispute only the minutes they question. |
+| **Trust and safety** | Strikes with appeals, never an automatic permanent ban. Two-way blind ratings. Chat that blocks payment requests and links. Masked calls, SOS with live location, and a safety desk. Shift posts asking for a "registration fee", "fair skin" or an "aadhaar copy" go to human review. |
+| **Identity** | KYC through DigiLocker (mocked) without storing Aadhaar numbers. Face matching with duplicate-identity detection, a UPI name match, and device limits. |
+| **Compliance (India)** | Minimum-wage checks. The DPDP Act: data export, deletion, consent withdrawal, retention and a grievance officer. GST invoices. The **Karnataka Platform-based Gig Workers Act 2025**: the welfare fee is charged to the business and never to the worker, and removing a worker takes **14 days' written notice** with reasons the worker can reply to. |
+| **Operations** | Role-based admin console with 7 roles. The audit log is hash-chained, and every staff write needs a reason. Two-person rules for policy changes, manual payouts and high-risk approvals. |
+
+**By the numbers:** 294 automated tests (unit, integration, OWASP/RBAC matrices, and abuse-case
+tests mapped in [docs/ABUSE_CASES.md](docs/ABUSE_CASES.md)), 6 Playwright journeys across all three
+apps, and 10 SQL migrations. Over 90 recorded design decisions are in [docs/DECISIONS.md](docs/DECISIONS.md).
+
+**Stack:**
+- TypeScript throughout, in an npm-workspaces monorepo;
+- the API: Fastify 5 + zod 4, on Postgres 16 with PostGIS (raw SQL, no ORM);
+- the business and admin apps: Next.js;
+- the worker app: Expo / React Native, Android-first;
+- tests: Vitest and Playwright.
+
+**Design docs:**
+- [SPEC](docs/SPEC.md)
+- [Decisions](docs/DECISIONS.md)
+- [Security review](docs/SECURITY_REVIEW.md)
+- [Breach response](docs/BREACH_RESPONSE.md)
+- [Legal review pack](docs/LEGAL_REVIEW.md)
+- [Go-live plan](docs/GO_LIVE.md)
+
+**Status:** Phase 6 (go-live readiness) done. Before real users, a lawyer must confirm the legal working assumptions, and the mocks must be swapped for sandbox → live providers. See [docs/GO_LIVE.md](docs/GO_LIVE.md).
 
 ## What you need
 
@@ -56,9 +88,9 @@ Seeded staff accounts, one per role:
 | support@shiftkart.local | ops_support | See users (phones masked) |
 | verifier@shiftkart.local | ops_verifier | See users (verification queues come in Phase 2) |
 | disputes@shiftkart.local | ops_disputes | See users |
-| safety@shiftkart.local | ops_safety | See users, reveal a phone (with a reason), limit/suspend users |
+| safety@shiftkart.local | ops_safety | See users, reveal a phone (with a reason), limit users, give a worker a removal notice (optionally with a safety hold) |
 | finance@shiftkart.local | finance | Read policy values (payouts come in Phase 3) |
-| compliance@shiftkart.local | compliance | Read audit log and verify it, suspend users, read policy |
+| compliance@shiftkart.local | compliance | Read audit log and verify it, give removal notices, read policy |
 
 - **Password:** the `SEED_STAFF_PASSWORD` line in your `.env` file.
 - **2FA code:** staff need a 6-digit code that changes every 30 seconds. Locally you can print it:
@@ -70,7 +102,9 @@ npm run totp -- safety@shiftkart.local
 ### Things to try
 1. Log in as **support**. Open Users: phone numbers are masked, and there's no Reveal button.
 2. Log in as **safety**. Click a user, try **Reveal phone** without a reason (blocked), then with one.
-   Suspend the user with a reason.
+   For a worker, **Give removal notice** with a reason: the account stays open for 14 days, the
+   worker sees the reasons in the app (👤 Me) and can reply, and you can **Withdraw notice**.
+   Business accounts are suspended at once.
 3. Log in as **compliance**. Open **Audit log**: your actions are there with who, when and why.
    Click **Verify hash chain**.
 4. Log in as **super**. Add a staff member; disable one. Disabled staff are logged out at once.

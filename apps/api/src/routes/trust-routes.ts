@@ -8,6 +8,7 @@ import { conflict, notFound } from '../lib/errors';
 import { staffActor, userActor } from '../auth/guard';
 import { requireMember } from './businesses';
 import { appealStrike, decideAppeal, strikePoints, turnAway } from '../trust';
+import { noticeRow, pendingNotice, respondToNotice } from '../removal';
 import { blockBusiness, listMessages, rate, reportMessage, sendMessage, startCall, unblockBusiness, workerRating, type Party } from '../community';
 import { addStatement, listCases, opsCaseAction, partyOpensCase, raiseSos, reportIncident, setTrustedContact, sharedLocation, sosLocation, viewCase } from '../cases';
 import { listHires, offerHire, payHireFee, respondHire } from '../conversion';
@@ -17,6 +18,7 @@ import { badRequest } from '../lib/errors';
 const workerAuth = { auth: { user: { kinds: ['worker' as const] } } };
 const bizAuth = { auth: { user: { kinds: ['business' as const] } } };
 const IdParam = z.object({ id: z.string().uuid() }).strict();
+const NoticeResponse = z.object({ response: z.string().trim().min(10).max(2000) }).strict();
 const BizIdParam = z.object({ businessId: z.string().uuid(), id: z.string().uuid() }).strict();
 const BizParam = z.object({ businessId: z.string().uuid() }).strict();
 const Rating = z.object({
@@ -49,6 +51,19 @@ export async function trustRoutes(app: FastifyInstance, { db, sms, config }: App
       ...level, rating,
       items: r.rows.map((k) => ({ id: k.id, kind: k.kind, points: k.points, status: k.status, emergency: k.emergency, shiftTitle: k.title, hoursBefore: k.hours_before ? Number(k.hours_before) : null, expiresAt: k.expires_at, appealReason: k.appeal_reason, decisionReason: k.decision_reason, at: k.created_at })),
     };
+  });
+
+  // ---------------------------------------------------------------- removal notice (worker, D-091)
+
+  app.get('/worker/removal-notice', { config: workerAuth }, async (req) => {
+    const n = await pendingNotice(db, userActor(req).userId);
+    return { notice: n ? noticeRow(n) : null };
+  });
+
+  app.post('/worker/removal-notice/:id/respond', { config: workerAuth }, async (req) => {
+    const { id } = parse(IdParam, req.params);
+    const { response } = parse(NoticeResponse, req.body);
+    return respondToNotice(db, userActor(req).userId, id, response);
   });
 
   app.post('/worker/strikes/:id/appeal', { config: workerAuth }, async (req) => {

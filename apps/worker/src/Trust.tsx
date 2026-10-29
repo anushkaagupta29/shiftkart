@@ -124,21 +124,38 @@ export function SafetyScreen({ t, go, setError, bookingId }: P & { bookingId?: s
 
 type Strikes = { points: number; level: string; limitAt: number; holdAt: number; rating: { score: number; count: number }; items: { id: string; kind: string; points: number; status: string; emergency: boolean; shiftTitle: string; expiresAt: string; decisionReason: string | null; at: string }[] };
 type Case = { id: string; kind: string; status: string; summary: string; shiftTitle: string | null; createdAt: string };
+type Notice = { id: string; reasons: string; interimHold: boolean; effectiveAt: string; workerResponse: string | null };
 
 /** "Me": reliability, rating, strikes with appeals, and disputes. */
 export function MeScreen({ t, lang, go, setError }: P) {
   const [s, setS] = useState<Strikes | null>(null);
   const [cases, setCases] = useState<Case[]>([]);
   const [appeal, setAppeal] = useState<{ id: string; text: string } | null>(null);
+  const [notice, setNotice] = useState<Notice | null>(null);
+  const [reply, setReply] = useState('');
   const { busy, run } = useBusy(setError);
   const load = useCallback(() => {
     api<Strikes>('/worker/strikes').then(setS).catch(() => {});
+    api<{ notice: Notice | null }>('/worker/removal-notice').then((r) => setNotice(r.notice)).catch(() => {});
     api<Case[]>('/worker/disputes').then(setCases).catch(() => {});
   }, []);
   useEffect(load, [load]);
   if (!s) return <Screen><T>…</T></Screen>;
   return (
     <Screen title={`👤 ${t.me}`} onBack={() => go({ name: 'home', tab: 'shifts' })} backLabel={t.back}>
+      {notice && (
+        <Card>
+          <T bold>⚠️ {t.noticeTitle(istDay(notice.effectiveAt, lang))}</T>
+          <T>{t.noticeReasons}: {notice.reasons}</T>
+          <T muted>{notice.interimHold ? t.noticeHold : t.noticeWork}</T>
+          {notice.workerResponse ? <T>{t.noticeReplied}: {notice.workerResponse}</T> : (
+            <>
+              <Field label={t.noticeReply} value={reply} onChangeText={setReply} multiline style={{ fontSize: 17, minHeight: 60 }} />
+              <Big label={t.submit} busy={busy} disabled={reply.trim().length < 10} onPress={() => run(async () => { await api(`/worker/removal-notice/${notice.id}/respond`, { method: 'POST', body: { response: reply } }); setReply(''); load(); })} />
+            </>
+          )}
+        </Card>
+      )}
       <Card>
         <T size={22} bold>⭐ {s.rating.score.toFixed(1)}  <T muted>({s.rating.count})</T></T>
         <T>{t.strikePoints}: {s.points} · {s.level === 'ok' ? t.levelOk : s.level === 'limited' ? t.levelLimited : t.levelHold}</T>

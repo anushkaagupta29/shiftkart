@@ -81,6 +81,21 @@ export const TEMPLATES = {
     hi: (v) => `ShiftKart: एक वर्कर ने "${v.title}" रद्द की। ${v.slot === 'offered' ? 'जगह वेटलिस्ट के अगले व्यक्ति को दी गई है।' : 'जगह फिर से खुली है।'}`,
     kn: (v) => `ShiftKart: ಒಬ್ಬ ಕೆಲಸಗಾರ "${v.title}" ರದ್ದುಗೊಳಿಸಿದ್ದಾರೆ. ${v.slot === 'offered' ? 'ಜಾಗ ವೇಟ್‌ಲಿಸ್ಟ್‌ನ ಮುಂದಿನವರಿಗೆ ನೀಡಲಾಗಿದೆ.' : 'ಜಾಗ ಮತ್ತೆ ಖಾಲಿಯಿದೆ.'}`,
   } },
+  removal_notice: { critical: true, whatsapp: true, text: {
+    en: (v) => `ShiftKart: notice that your account will be closed on ${v.date}. Reasons: ${v.reasons} ${v.hold ? 'Until then you cannot take new shifts. ' : 'You can keep working until then. '}You can reply in the app (Me > Notice).`,
+    hi: (v) => `ShiftKart: सूचना: आपका खाता ${v.date} को बंद होगा। कारण: ${v.reasons} ${v.hold ? 'तब तक आप नई शिफ्ट नहीं ले सकते। ' : 'तब तक आप काम कर सकते हैं। '}आप ऐप में जवाब दे सकते हैं (मैं > सूचना)।`,
+    kn: (v) => `ShiftKart: ಸೂಚನೆ: ನಿಮ್ಮ ಖಾತೆ ${v.date}ರಂದು ಮುಚ್ಚಲಾಗುತ್ತದೆ. ಕಾರಣಗಳು: ${v.reasons} ${v.hold ? 'ಅಲ್ಲಿಯವರೆಗೆ ಹೊಸ ಶಿಫ್ಟ್ ತೆಗೆದುಕೊಳ್ಳಲಾಗುವುದಿಲ್ಲ. ' : 'ಅಲ್ಲಿಯವರೆಗೆ ನೀವು ಕೆಲಸ ಮಾಡಬಹುದು. '}ಆ್ಯಪ್‌ನಲ್ಲಿ ಉತ್ತರಿಸಬಹುದು (ನಾನು > ಸೂಚನೆ).`,
+  } },
+  removal_withdrawn: { critical: true, whatsapp: true, text: {
+    en: (v) => `ShiftKart: the notice to close your account has been withdrawn. ${v.reason}`,
+    hi: (v) => `ShiftKart: आपका खाता बंद करने की सूचना वापस ले ली गई है। ${v.reason}`,
+    kn: (v) => `ShiftKart: ನಿಮ್ಮ ಖಾತೆ ಮುಚ್ಚುವ ಸೂಚನೆಯನ್ನು ಹಿಂಪಡೆಯಲಾಗಿದೆ. ${v.reason}`,
+  } },
+  removal_effective: { critical: true, whatsapp: false, text: {
+    en: () => `ShiftKart: your account is now closed, as given in the notice. Money you are owed will still be paid. To complain, contact our grievance officer.`,
+    hi: () => `ShiftKart: सूचना के अनुसार आपका खाता अब बंद है। आपका बकाया पैसा फिर भी मिलेगा। शिकायत के लिए हमारे शिकायत अधिकारी से संपर्क करें।`,
+    kn: () => `ShiftKart: ಸೂಚನೆಯಂತೆ ನಿಮ್ಮ ಖಾತೆ ಈಗ ಮುಚ್ಚಲಾಗಿದೆ. ನಿಮಗೆ ಬರಬೇಕಾದ ಹಣ ಪಾವತಿಯಾಗುತ್ತದೆ. ದೂರಿಗಾಗಿ ನಮ್ಮ ಕುಂದುಕೊರತೆ ಅಧಿಕಾರಿಯನ್ನು ಸಂಪರ್ಕಿಸಿ.`,
+  } },
 } satisfies Record<string, Template>;
 
 export type TemplateName = keyof typeof TEMPLATES;

@@ -11,7 +11,7 @@
 | L-15 | Escrow structure: which RBI-authorised PA holds business money, and how? | A per-shift escrow account in our own ledger (mock). | Payment adapter + ledger accounts. |
 | L-27 | Terms of service, privacy notice, worker and business agreements | Placeholders saying "DRAFT — not final"; consent version `draft-0`. | `CONSENT_VERSION` in `auth/otp.ts`; app copy. |
 | L-32 | Company registration; any state aggregator registration | None. | — |
-| L-02, L-03 | Gig-worker social security: Central Code, and the Karnataka Platform-based Gig Workers Act: rates, registration, reporting | Built (D-090): charged to the business on top of worker pay and never deducted from workers; on the invoice as its own line with no GST. **Rate 0 until confirmed.** | `welfare.central_bp`, `welfare.state_bp` (scope `state:KA`) |
+| L-02, L-03 | Gig-worker social security: Central Code, and the Karnataka Platform-based Gig Workers Act: rates, registration, reporting | Built (D-090): charged to the business on top of worker pay and never deducted from workers; on the invoice as its own line with no GST. **Rate 0 until confirmed.** Removal of a worker: 14 days' written notice, built (D-091); confirm the interim safety hold. | `welfare.central_bp`, `welfare.state_bp` (scope `state:KA`), `removal.notice_days` |
 | L-21 | Aadhaar via DigiLocker / a licensed KYC provider, never storing the number: is our flow compliant? | Only name, birth year and a one-way reference hash are kept. | `routes/worker.ts` (KYC complete). |
 
 ## Priority 2: needed before real money and real workers

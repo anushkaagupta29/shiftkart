@@ -88,9 +88,7 @@ async function evaluateShift(db: Queryable, businessId: string, body: ShiftInput
   const r = { basicPaisePerDay: rate.basic_paise_per_day, vdaPaisePerDay: rate.vda_paise_per_day, standardHoursPerDay: rate.standard_hours_per_day };
   const minHourly = minHourlyPaise(r);
   if (!meetsMinimumWage(body.payType, body.payPaise, minutes, r)) {
-    const err = new HttpError(422, 'below_minimum_wage', `Base pay is below the minimum wage (₹${(minHourly / 100).toFixed(2)}/hour for ${category.replace('_', '-')} work here). Allowances don't count toward it.`);
-    err.issues = [{ path: 'payPaise', message: `minimum ${minHourly} paise per hour` }];
-    throw err;
+    throw new HttpError(422, 'below_minimum_wage', `Base pay is below the minimum wage (₹${(minHourly / 100).toFixed(2)}/hour for ${category.replace('_', '-')} work here). Allowances don't count toward it.`);
   }
 
   const pol = await getPolicies(db, ['fee.platform_bp', 'tax.gst_on_fee_bp']);

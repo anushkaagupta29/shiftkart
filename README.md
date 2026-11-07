@@ -39,6 +39,24 @@ apps, and 10 SQL migrations. Over 90 recorded design decisions are in [docs/DECI
 - [Legal review pack](docs/LEGAL_REVIEW.md)
 - [Go-live plan](docs/GO_LIVE.md)
 
+## How I built this
+
+I built ShiftKart with Claude Code (Anthropic's AI coding assistant) as a pair programmer; the
+`Co-Authored-By` lines in the commit history show where. My part was deciding what the product must
+do and checking that it does it:
+
+- **The rules.** Workers never pay anything; Aadhaar numbers are never stored; all money is integer
+  paise and every payment call is idempotent; nothing touches a real external system until go-live.
+- **The scope.** Bengaluru first; Hindi, Kannada and English; a 15% platform fee paid by the business;
+  short warehouse, retail, event and kitchen shifts.
+- **The checks.** Each phase had to pass the test suite and the 1,000-user load test before it was
+  committed. I also reviewed the demo flows by hand and recorded the walkthrough.
+
+Using AI let one student build a platform of this size in a few weeks. If you're reviewing the code,
+start with the ledger and escrow ([ledger.ts](apps/api/src/ledger.ts),
+[money.ts](apps/api/src/money.ts)) and how booking stays correct when a thousand people accept at
+once ([booking.ts](apps/api/src/booking.ts)).
+
 **Status:** Phase 6 (go-live readiness) done. Before real users, a lawyer must confirm the legal working assumptions, and the mocks must be swapped for sandbox → live providers. See [docs/GO_LIVE.md](docs/GO_LIVE.md).
 
 ## What you need
